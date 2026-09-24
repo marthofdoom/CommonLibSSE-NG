@@ -208,8 +208,13 @@ namespace RE
 
 		[[nodiscard]] static TESForm* LookupByID(FormID a_formID)
 		{
+			// Take the engine's own shared lock on the all-forms map. The old line copy-constructed a
+			// BSReadWriteLock and acquired nothing, so an off-main-thread lookup walked the map while
+			// the engine inserted or erased forms under the write lock. This matches the engine's
+			// lookup (SE 14461 @0x194230, AE 14617 @0x1E01A0): LockForRead, find, UnlockForRead.
+			// The map pointer itself is set once at startup and cleared only at shutdown.
 			const auto& [map, lock] = GetAllForms();
-			[[maybe_unused]] const BSReadWriteLock l{ lock };
+			const BSReadLockGuard locker{ lock.get() };
 			if (map) {
 				const auto it = map->find(a_formID);
 				return it != map->end() ? it->second : nullptr;
@@ -227,10 +232,14 @@ namespace RE
 
 		[[nodiscard]] static TESForm* LookupByEditorID(const std::string_view& a_editorID)
 		{
+			// Same fix for the editor-id map and its own lock (engine: SE 14462 @0x1942E0, AE 14618
+			// @0x1E0250 take LockForRead on it). The key is interned BEFORE the lock, so no string
+			// pool lock is ever taken while this read lock is held.
+			const BSFixedString key{ a_editorID };
 			const auto& [map, lock] = GetAllFormsByEditorID();
-			[[maybe_unused]] const BSReadWriteLock l{ lock };
+			const BSReadLockGuard locker{ lock.get() };
 			if (map) {
-				const auto it = map->find(a_editorID);
+				const auto it = map->find(key);
 				return it != map->end() ? it->second : nullptr;
 			} else {
 				return nullptr;
