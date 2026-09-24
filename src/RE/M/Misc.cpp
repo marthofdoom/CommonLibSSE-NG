@@ -102,6 +102,20 @@ namespace RE
 		return func(a_editorID);
 	}
 
+	void SendInventoryUpdateMessage(TESObjectREFR* a_refr, const TESBoundObject* a_item)
+	{
+		// mit-3.7 (upstream PR #109): verified 1.6.1170 id 52849 at 0x976A80 (rbp = rcx
+		// refr, r14 = rdx item, early-out when refr is null), 1.5.97 id 51911 at
+		// 0x8D5710 (r14 = rcx refr, r15 = rdx item, same early-out). No VR id has been
+		// verified: refused by name.
+		if (REL::Module::IsVR()) {
+			stl::report_and_fail("SendInventoryUpdateMessage: no verified VR id; refused."sv);
+		}
+		using func_t = decltype(&SendInventoryUpdateMessage);
+		REL::Relocation<func_t> func{ RELOCATION_ID(51911, 52849) };
+		return func(a_refr, a_item);
+	}
+
 	void ShakeCamera(float a_strength, const NiPoint3& a_position, float a_duration)
 	{
 		using func_t = decltype(&ShakeCamera);
