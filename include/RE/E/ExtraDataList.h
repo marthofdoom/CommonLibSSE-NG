@@ -133,10 +133,32 @@ namespace RE
 		using iterator = iterator_base<BSExtraData>;
 		using const_iterator = iterator_base<const BSExtraData>;
 
+		// mit-3.7 (upstream PR #108): defined, it calls the engine's own constructor.
+		// HEAP ONLY. The real object is bigger than sizeof(ExtraDataList) (0x10 in a
+		// multi-runtime build): the engine allocates 0x18 on 1.5.97 and 0x20 on
+		// 1.6.1170, and its constructor writes all of it. So `new ExtraDataList()` goes
+		// through the operator new below, which allocates the exact build's size. A
+		// stack or member ExtraDataList, or an array, would be overrun by the ctor.
 		ExtraDataList();
 		~ExtraDataList();
 
-		TES_HEAP_REDEFINE_NEW();
+		// mit-3.7: the engine size of one ExtraDataList on the running build (0x18 on
+		// 1.5.97.0, 0x20 on 1.6.1170.0); a named fatal error on any other build.
+		[[nodiscard]] static std::size_t GetRuntimeSize() noexcept;
+
+		[[nodiscard]] inline void* operator new(std::size_t)
+		{
+			const auto mem = RE::malloc(GetRuntimeSize());
+			if (mem) {
+				return mem;
+			} else {
+				stl::report_and_fail("out of memory"sv);
+			}
+		}
+		void* operator new[](std::size_t) = delete;
+		[[nodiscard]] constexpr void* operator new(std::size_t, void* a_ptr) noexcept { return a_ptr; }
+		inline void operator delete(void* a_ptr) { RE::free(a_ptr); }
+		void operator delete[](void*) = delete;
 
 		iterator       begin();
 		const_iterator cbegin() const;

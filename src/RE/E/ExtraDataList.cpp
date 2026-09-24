@@ -21,6 +21,34 @@
 
 namespace RE
 {
+	std::size_t ExtraDataList::GetRuntimeSize() noexcept
+	{
+		// Verified from the engine's own allocations before each constructor call
+		// (61 call sites of the ctor on each build): 1.5.97 `lea edx,[r9+0x18]` /
+		// `lea edx,[rcx+0x18]`, 1.6.1170 `lea edx,[r9+0x20]` / `lea edx,[rcx+0x20]`.
+		if (REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170)) {
+			return 0x20;
+		}
+		if (REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_5_97)) {
+			return 0x18;
+		}
+		stl::report_and_fail(
+			fmt::format(
+				"ExtraDataList::GetRuntimeSize: the ExtraDataList size is not verified for game version {} "
+				"(verified: 1.6.1170.0, 1.5.97.0)."sv,
+				REL::Module::get().version().string(".")));
+	}
+
+	ExtraDataList::ExtraDataList()
+	{
+		// Verified: 1.5.97 id 11437 at 0x107690 zeroes +0x00/+0x08 and builds the lock
+		// at +0x10; 1.6.1170 id 11583 at 0x151E90 stores a vtable at +0x00, zeroes
+		// +0x08/+0x10 and builds the lock at +0x18. rcx = this, returns this.
+		using func_t = void(ExtraDataList*);
+		REL::Relocation<func_t> func{ RELOCATION_ID(11437, 11583) };
+		func(this);
+	}
+
 	bool BaseExtraList::PresenceBitfield::HasType(std::uint32_t a_type) const
 	{
 		const std::uint32_t index = (a_type >> 3);
