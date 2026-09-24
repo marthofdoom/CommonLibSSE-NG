@@ -8,6 +8,23 @@ https://github.com/CharmedBaryon/CommonLibSSE-NG/actions/workflows/main_ci.yml)
 
 CommonLibSSE NG is a fork of CommonLibSSE which tracks upstream updates but adds a number of enhancements.
 
+## Why this fork exists
+
+This is CommonLibSSE-NG 3.7.0 from CharmedBaryon, kept on its MIT license. The branch `mit-3.7` starts exactly at
+the upstream v3.7.0 commit `c4ab853d095e81e3390b282d7ba01ab2f24ebf25`. The maintained fork moved to
+GPL-3.0-or-later (with modding exceptions). My mods are MIT, so I keep an MIT line of 3.7.0 instead.
+
+The license does not change. The original LICENSE file and its copyright notice stay as they are. New files will
+carry my own notice under the same MIT terms.
+
+Right now this branch is 3.7.0 plus this section. The library source is the upstream release, unchanged. My mods
+consume it through my own vcpkg registry, [marthofdoom/vcpkg-registry](https://github.com/marthofdoom/vcpkg-registry).
+
+Later changes come in stages. First come fixes I verified against the game's own code on 1.5.97 and 1.6.1170.
+Then comes support for 1.7.104 that I write from the file format and my own disassembly. No code from the GPL fork
+goes in here. Every change says what it fixes and how it was proven. If a fix here disagrees with a header somewhere
+else, the disassembly note in the commit is the reason.
+
 ## New Features
 ### Multiple Runtime Targets
 ![stability](https://img.shields.io/static/v1?label=stability&message=stable&color=dimgreen&style=flat)
