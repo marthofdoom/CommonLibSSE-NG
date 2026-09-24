@@ -1612,6 +1612,7 @@ set(SOURCES
 	include/RE/Z/ZeroFunctionArguments.h
 	include/RE/Z/ZeroOverheadHeap.h
 	include/REL/Relocation.h
+	include/REL/SelfCheck.h
 	include/SKSE/API.h
 	include/SKSE/Events.h
 	include/SKSE/IAT.h
