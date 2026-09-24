@@ -69,8 +69,8 @@ namespace REL::SelfCheck
 
 		[[nodiscard]] const std::vector<Failure>& Failures() const noexcept { return _failures; }
 
-		// True only for base + rva of a row that passed. An address no row covers is NOT
-		// verified: the caller refuses it.
+		// True only for base + rva + bytesOffset of a row that passed (base + rva for a row
+		// without an offset). An address no row covers is NOT verified: the caller refuses it.
 		[[nodiscard]] bool IsVerifiedAddress(std::uintptr_t a_address) const noexcept
 		{
 			return std::binary_search(_verified.begin(), _verified.end(), a_address);
@@ -146,7 +146,9 @@ namespace REL::SelfCheck
 				}
 			}
 
-			result._verified.push_back(base + row.rva);
+			// A row with a byte check at an offset (a call site) verifies that exact
+			// address; every other row verifies base + rva.
+			result._verified.push_back(base + row.rva + row.bytesOffset);
 			result._labels.emplace_back(row.label);
 		}
 		std::sort(result._verified.begin(), result._verified.end());
