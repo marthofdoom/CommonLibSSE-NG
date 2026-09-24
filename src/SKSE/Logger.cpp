@@ -107,7 +107,17 @@ namespace SKSE
 			if SKYRIM_REL_VR_CONSTEXPR (REL::Module::IsVR()) {
 				path /= "Skyrim VR";
 			} else {
-                path /= *REL::Relocation<const char**>(RELOCATION_ID(508778, 380738)).get();
+				// mit-3.7: the AE id was 380738, which is NOT in the 1.6.1170 Address
+				// Library (versionlib-1-6-1170-0.bin). Upstream's lookup silently fell
+				// through to the next id, 380740 (RVA 0x20123C0), a pointer to
+				// "Skyrim.INI", so on AE this built "My Games\Skyrim.INI\SKSE". The real
+				// variable is id 502114, RVA 0x20123B0, which points at the .rdata string
+				// "Skyrim Special Edition" (RVA 0x1892F80). It is the AE twin of SE
+				// 508778 (RVA 0x1DEEBF0): six xrefs each with the same instruction
+				// shapes (SE 0x148CD9 mov rdx / 0x5AE0E0 mov rcx / 0x5AE102 mov rcx /
+				// 0x5AE825 mov rax / 0x5B742B mov r9 / 0x5B74BA; AE 0x191589 / 0x640214 /
+				// 0x640236 / 0x640CE5 / 0x64B1A8 / 0x64B284).
+				path /= *REL::Relocation<const char**>(RELOCATION_ID(508778, 502114)).get();
 			}
 			path /= "SKSE"sv;
 			return path;
