@@ -1,5 +1,7 @@
 #include "RE/A/Actor.h"
 
+#include "SKSE/Logger.h"
+
 #include "RE/A/AIProcess.h"
 #include "RE/A/ActorMagicCaster.h"
 #include "RE/B/BGSAttackData.h"
@@ -441,7 +443,16 @@ namespace RE
 			return 0;
 		}
 
+		// mit-3.7: upstream dereferenced this unconditionally. It was never null only
+		// because the old accessor read garbage (see BGSDefaultObjectManager.h); on
+		// 1.6.1170 the garbage pointer produced the recorded GetGoldAmount CTD. The
+		// accessor now reads the real layout, and returns null only when the Gold
+		// default object is absent or the build is unverified, which is logged.
 		const auto gold = dobj->GetObject<TESObjectMISC>(DefaultObjectID::kGold);
+		if (!gold || !*gold) {
+			SKSE::log::error("Actor::GetGoldAmount: the Gold default object is unavailable; returning 0 (not a count)");
+			return 0;
+		}
 		const auto it = inv.find(*gold);
 		return it != inv.end() ? it->second.first : 0;
 	}

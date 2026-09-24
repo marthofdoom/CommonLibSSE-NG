@@ -1013,18 +1013,39 @@ namespace RE
 			return func();
 		}
 
-		[[nodiscard]] TESForm* GetObject(DefaultObject a_object) const noexcept { return GetObject(stl::to_underlying(a_object)); }
+		// mit-3.7: every accessor below reads the engine layout of the EXACT running
+		// build. Upstream 3.7.0 used RelocateMember<bool*>(this, 0xB80) and
+		// RelocateMember<TESForm**>(this, 0x20), which return the qword STORED at
+		// those offsets and use it as a pointer: GetObject(DefaultObjectID) and
+		// IsObjectInitialized(size_t) read through objects[364] (AE) or the first
+		// eight init flags 0x0101010101010101 (SE) as if it were the flag array, and
+		// through objects[0] as if it were the object array. Verified layouts:
+		//   1.6.1170: 366 objects at +0x20, init flags at +0xB90 (ctor memset 0xCDE at
+		//             0x315210; InitItemImpl 0x3154A6 lea rdi,[rcx+0xB90]; engine
+		//             GetDefaultObject id 11436 cmp byte [rbx+rdi+0xB90]). Entries 363
+		//             HMCC and 364 HMAE are inserted before 365 MHFL (data table
+		//             0x1FD8F50).
+		//   1.5.97:   364 objects at +0x20, init flags at +0xB80 (memset 0xCCC at
+		//             0x2C0820; InitItemImpl 0x2C0A9B lea rdi,[rcx+0xB80], count 0x16C).
+		// Any other build (VR included) is refused: the accessors return nullptr /
+		// false and log one critical line naming the game version. No guessing.
+		//
+		// The DEFAULT_OBJECT and DefaultObjectID enums are numbered as on 1.5.97. The
+		// enum overloads translate to the running build's index (kModsHelpFormList
+		// 363 -> 365 on 1.6.1170). The std::size_t overloads take the running build's
+		// own engine index and are bounds-checked against its count.
+
+		[[nodiscard]] TESForm* GetObject(DefaultObject a_object) const noexcept { return GetObject(GetRuntimeIndex(stl::to_underlying(a_object))); }
 
 		template <class T>
 		[[nodiscard]] T* GetObject(DefaultObject a_object) const noexcept
 		{
-			return GetObject<T>(stl::to_underlying(a_object));
+			return GetObject<T>(GetRuntimeIndex(stl::to_underlying(a_object)));
 		}
 
 		[[nodiscard]] TESForm* GetObject(std::size_t a_idx) const noexcept
 		{
-			assert(a_idx < stl::to_underlying(DefaultObject::kTotal));
-			return IsObjectInitialized(a_idx) ? objects[a_idx] : nullptr;
+			return IsObjectInitialized(a_idx) ? GetObjectArray()[a_idx] : nullptr;
 		}
 
 		template <class T>
@@ -1045,15 +1066,20 @@ namespace RE
 
 		[[nodiscard]] bool IsObjectInitialized(DEFAULT_OBJECT a_object) const noexcept
 		{
-			return IsObjectInitialized(stl::to_underlying(a_object));
+			return IsObjectInitialized(GetRuntimeIndex(stl::to_underlying(a_object)));
 		}
 
 		[[nodiscard]] bool IsObjectInitialized(DefaultObjectID a_object) const noexcept;
 
-		[[nodiscard]] bool IsObjectInitialized(std::size_t a_idx) const noexcept
-		{
-			return REL::RelocateMember<bool*>(this, 0xB80, 0xBA8)[a_idx];
-		}
+		[[nodiscard]] bool IsObjectInitialized(std::size_t a_idx) const noexcept;
+
+		// mit-3.7: the running build's object count (366 on 1.6.1170, 364 on 1.5.97),
+		// or 0 on a build whose layout is not verified (logged once, critical).
+		[[nodiscard]] static std::size_t GetRuntimeObjectCount() noexcept;
+
+		// mit-3.7: a 1.5.97-numbered index (the enums' numbering) translated to the
+		// running build's index. Returns an out-of-range value on an unverified build.
+		[[nodiscard]] static std::size_t GetRuntimeIndex(std::size_t a_seIndex) noexcept;
 
 		[[nodiscard]] static bool SupportsVR(DefaultObjectID a_object) noexcept;
 
@@ -1066,10 +1092,19 @@ namespace RE
 
 		[[nodiscard]] static bool SupportsCurrentRuntime(DefaultObjectID a_object) noexcept;
 
+	private:
+		[[nodiscard]] TESForm* const* GetObjectArray() const noexcept
+		{
+			return reinterpret_cast<TESForm* const*>(reinterpret_cast<std::uintptr_t>(this) + 0x20);
+		}
+
+		[[nodiscard]] const bool* GetInitArray() const noexcept;
+
+	public:
 		// members
 		TESForm* objects[DEFAULT_OBJECTS::kTotal];  // 020 - DNAM
 #ifndef SKYRIM_CROSS_VR
-		bool          objectInit[DEFAULT_OBJECTS::kTotal];  // B80
+		bool          objectInit[DEFAULT_OBJECTS::kTotal];  // B80 on 1.5.97 only; B90 on 1.6.1170 (use IsObjectInitialized)
 		std::uint32_t padCEC;                               // CEC
 #else
 		std::uint8_t unk5D8[0x718];  // 5D8
