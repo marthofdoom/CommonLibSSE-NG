@@ -39,6 +39,11 @@ Each item is one commit, and the commit message carries the addresses and instru
 - `REL::SelfCheck`: a consumer lists the ids it hooks with the RVAs its own disassembly found, and refuses a
   hook whose id the loaded library places anywhere else.
 
+### Stage F1b
+
+- `TESForm::LookupByID` and `LookupByEditorID` hold the game's own read lock on the form maps. In 3.7.0 they
+  copied the lock and held nothing, so a lookup from another thread could read a map the game was changing.
+
 Nothing is guessed for other builds. VR and 1.7.x are not verified here, and the new accessors refuse them.
 Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()` there is the safe behaviour.
 
