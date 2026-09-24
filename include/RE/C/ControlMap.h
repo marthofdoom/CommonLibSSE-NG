@@ -79,36 +79,82 @@ namespace RE
 		};
 		static_assert(sizeof(LinkedMapping) == 0x20);
 
+		// mit-3.7: the members after controlMap[] sit at different offsets per build,
+		// because 1.6.1170 has 18 input contexts and 1.5.97 has 17. Verified from each
+		// ControlMap constructor (the function that stores the singleton):
+		//   1.5.97   (0xC10DDB): memset(this+0x60, 0, 0x88) = 17 contexts, BSTArray
+		//            ctors at +0xE8 / +0x100, [+0x118]=0xFFFFFFFF, [+0x11C]=0x80000000,
+		//            word [+0x120]=0, byte [+0x122]=0, [+0x124]=0.
+		//   1.6.1170 (0xCD4699): memset(this+0x60, 0, 0x90) = 18 contexts, BSTArray
+		//            ctors at +0xF0 / +0x108, [+0x120]=0xFFFFFFFF, [+0x124]=0x80000000,
+		//            word [+0x128]=0, byte [+0x12A]=0, [+0x12C]=0.
+		// So everything past controlMap[] is RUNTIME_DATA, at +0xE8 on 1.5.97 and +0xF0
+		// on 1.6.1170. Upstream declared the 1.5.97 layout for both, and its inline
+		// ToggleControls wrote +0x118, which on 1.6.1170 is contextPriorityStack's
+		// size (the crash in MFO CLAUDE.md principle 11).
+		struct RUNTIME_DATA
+		{
+		public:
+			// members
+			BSTArray<LinkedMapping>                          linkedMappings;                // 00
+			BSTArray<InputContextID>                         contextPriorityStack;          // 18
+			stl::enumeration<UEFlag, std::uint32_t>          enabledControls;               // 30
+			stl::enumeration<UEFlag, std::uint32_t>          unk11C;                        // 34 - saved state, kInvalid when none
+			std::int8_t                                      textEntryCount;                // 38
+			bool                                             ignoreKeyboardMouse;           // 39
+			bool                                             ignoreActivateDisabledEvents;  // 3A
+			std::uint8_t                                     pad3B;                         // 3B
+			stl::enumeration<PC_GAMEPAD_TYPE, std::uint32_t> gamePadMapType;                // 3C
+		};
+		static_assert(sizeof(RUNTIME_DATA) == 0x40);
+
 		static ControlMap* GetSingleton();
 
+		// mit-3.7: RUNTIME_DATA at the running build's offset. On a build whose layout
+		// is not verified (anything but 1.5.97.0 / 1.6.1170.0) this is a named fatal
+		// error, never a guessed offset. IsRuntimeDataVerified() lets a caller check first.
+		[[nodiscard]] static bool IsRuntimeDataVerified() noexcept;
+		[[nodiscard]] RUNTIME_DATA&       GetRuntimeData() noexcept;
+		[[nodiscard]] const RUNTIME_DATA& GetRuntimeData() const noexcept;
+
+		// mit-3.7: the running build's input context for a 1.5.97-numbered id, or
+		// nullptr. 1.6.1170 inserted a context ("Creations Menu" in its controlmap.txt)
+		// at 16, so kFavor is 17 there. Contexts 0..15 are the same on both builds
+		// (menu ctors write the same inputContext: Favorites 6, Map 7, Book 10,
+		// Journal 12, Lockpicking 15; IMenu's kNone is 0x12 on 1.5.97, 0x13 on
+		// 1.6.1170). On an unverified build every lookup is refused (nullptr, one
+		// critical log line). Prefer this to indexing controlMap[] directly.
+		[[nodiscard]] InputContext* GetInputContext(InputContextID a_context) const noexcept;
+
 		std::int8_t      AllowTextInput(bool a_allow);
-		constexpr bool   AreControlsEnabled(UEFlag a_flags) const noexcept { return enabledControls.all(a_flags); }
+		bool             AreControlsEnabled(UEFlag a_flags) const noexcept { return GetRuntimeData().enabledControls.all(a_flags); }
 		std::uint32_t    GetMappedKey(std::string_view a_eventID, INPUT_DEVICE a_device, InputContextID a_context = InputContextID::kGameplay) const;
 		std::string_view GetUserEventName(std::uint32_t a_buttonID, INPUT_DEVICE a_device, InputContextID a_context = InputContextID::kGameplay) const;
-		constexpr bool   IsActivateControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kActivate); }
-		constexpr bool   IsConsoleControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kConsole); }
-		constexpr bool   IsFightingControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kFighting); }
-		constexpr bool   IsLookingControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kLooking); }
-		constexpr bool   IsMenuControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kMenu); }
-		constexpr bool   IsMainFourControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kMainFour); }
-		constexpr bool   IsMovementControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kMovement); }
-		constexpr bool   IsPOVSwitchControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kPOVSwitch); }
-		constexpr bool   IsSneakingControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kSneaking); }
-		constexpr bool   IsVATSControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kVATS); }
-		constexpr bool   IsWheelZoomControlsEnabled() const noexcept { return enabledControls.all(UEFlag::kWheelZoom); }
-		void             ToggleControls(UEFlag a_flags, bool a_enable);
+		bool             IsActivateControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kActivate); }
+		bool             IsConsoleControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kConsole); }
+		bool             IsFightingControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kFighting); }
+		bool             IsLookingControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kLooking); }
+		bool             IsMenuControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kMenu); }
+		bool             IsMainFourControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kMainFour); }
+		bool             IsMovementControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kMovement); }
+		bool             IsPOVSwitchControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kPOVSwitch); }
+		bool             IsSneakingControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kSneaking); }
+		bool             IsVATSControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kVATS); }
+		bool             IsWheelZoomControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kWheelZoom); }
+
+		// mit-3.7: calls the engine's own ToggleControls (1.5.97 id 67245 at 0xC11C60,
+		// 1.6.1170 id 68545 at 0xCD5650; rcx this, edx flags, r8b enable, r9b
+		// storeState). It sets or clears enabledControls, and with storeState it does
+		// the same to the saved state unless that is kInvalid, then sends
+		// UserEventEnabled{new, old} from the event source at +0x08. storeState = true
+		// is exactly what 3.7.0's inline version meant to do. The engine function reads
+		// its own build's layout, so this is correct wherever the id resolves; VR has
+		// no verified id and is a named fatal error.
+		void ToggleControls(UEFlag a_flags, bool a_enable, bool a_storeState = true);
 
 		// members
-		InputContext*                                    controlMap[InputContextID::kTotal];  // 060
-		BSTArray<LinkedMapping>                          linkedMappings;                      // 0E8
-		BSTArray<InputContextID>                         contextPriorityStack;                // 100
-		stl::enumeration<UEFlag, std::uint32_t>          enabledControls;                     // 118
-		stl::enumeration<UEFlag, std::uint32_t>          unk11C;                              // 11C
-		std::int8_t                                      textEntryCount;                      // 120
-		bool                                             ignoreKeyboardMouse;                 // 121
-		bool                                             ignoreActivateDisabledEvents;        // 122
-		std::uint8_t                                     pad123;                              // 123
-		stl::enumeration<PC_GAMEPAD_TYPE, std::uint32_t> gamePadMapType;                      // 124
+		InputContext* controlMap[InputContextID::kTotal];  // 060 - 17 declared; 18 on 1.6.1170, use GetInputContext
+		                                                   // everything after this: GetRuntimeData()
 	};
-	static_assert(sizeof(ControlMap) == 0x128);
+	static_assert(sizeof(ControlMap) == 0xE8);
 }
