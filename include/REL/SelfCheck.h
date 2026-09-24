@@ -26,6 +26,9 @@
 
 namespace REL::SelfCheck
 {
+	// Names this library build in a consumer's startup log line. Bump with each fork stage.
+	inline constexpr std::string_view kLibrary = "CommonLibSSE-NG 3.7.0 mit-3.7 F1 (exact id match, exact-build layouts, SelfCheck)"sv;
+
 	struct Row
 	{
 	public:
