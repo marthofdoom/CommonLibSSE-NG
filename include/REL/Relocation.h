@@ -816,6 +816,18 @@ namespace REL {
         }
 
         /**
+         * mit-3.7: whether the running executable is EXACTLY this version, all four
+         * fields (major, minor, patch, build). Use this for anything whose layout or
+         * address was verified on one build only. IsAE()/IsSE() are BUCKETS: IsSE() is
+         * the default arm for every minor that is not 4 or 6, so it is true on every
+         * 1.5.x and on any future minor, and IsAE() is true on every 1.6.x. A value
+         * verified on 1.6.1170 or 1.5.97 is not verified on the rest of its bucket.
+         */
+        [[nodiscard]] static bool IsExactly(const Version &a_version) noexcept {
+            return get().version() == a_version;
+        }
+
+        /**
          * Returns whether the current Skyrim runtime is a Skyrim VR release.
          */
         [[nodiscard]] static SKYRIM_REL_VR bool IsVR() noexcept {
