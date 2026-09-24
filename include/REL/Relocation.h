@@ -1088,23 +1088,44 @@ namespace REL {
                         return a_lhs.id < a_rhs.id;
                     });
 
-            bool failed = false;
-            if (it == _id2offset.end()) {
-                failed = true;
-            } else if SKYRIM_REL_VR_CONSTEXPR (Module::IsVR()) {
-                if (it->id != a_id) {
-                    failed = true;
-                }
-            }
-            if (failed) {
+            // mit-3.7: an id that is not in the library is FATAL on every runtime.
+            // Upstream 3.7.0 only checked `it->id == a_id` on VR. On SE and AE a
+            // missing id fell through to `lower_bound`'s next entry and silently
+            // returned the offset of a DIFFERENT function or object, which a hook
+            // or a call would then use as if it were the right one. Now the id and
+            // the running game version are named in the log and the MessageBox
+            // (whose caption is this plugin's file name) and the process stops.
+            // No fallback, no guess (CLAUDE.md principle 7).
+            if (it == _id2offset.end() || it->id != a_id) {
                 stl::report_and_fail(
                         fmt::format(
-                                "Failed to find the id within the address library: {}\n"
+                                "Failed to find the id within the address library: {} (game version {})\n"
                                 "This means this script extender plugin is incompatible with the address "
                                 "library for this version of the game, and thus does not support it."sv,
-                                a_id));
+                                a_id, Module::get().version().string(".")));
             }
 
+            return static_cast<std::size_t>(it->offset);
+        }
+
+        /**
+         * mit-3.7: the non-fatal twin of id2offset, for self-checks that must report a
+         * missing id by name and refuse the one seat that needs it instead of stopping
+         * the game. Returns std::nullopt when the id is not in the library. Never returns
+         * a neighbouring id's offset.
+         */
+        [[nodiscard]] inline std::optional<std::size_t> try_id2offset(std::uint64_t a_id) const {
+            mapping_t elem{a_id, 0};
+            const auto it = std::lower_bound(
+                    _id2offset.begin(),
+                    _id2offset.end(),
+                    elem,
+                    [](auto &&a_lhs, auto &&a_rhs) {
+                        return a_lhs.id < a_rhs.id;
+                    });
+            if (it == _id2offset.end() || it->id != a_id) {
+                return std::nullopt;
+            }
             return static_cast<std::size_t>(it->offset);
         }
 
