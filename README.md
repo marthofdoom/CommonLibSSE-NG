@@ -17,8 +17,30 @@ GPL-3.0-or-later (with modding exceptions). My mods are MIT, so I keep an MIT li
 The license does not change. The original LICENSE file and its copyright notice stay as they are. New files will
 carry my own notice under the same MIT terms.
 
-Right now this branch is 3.7.0 plus this section. The library source is the upstream release, unchanged. My mods
-consume it through my own vcpkg registry, [marthofdoom/vcpkg-registry](https://github.com/marthofdoom/vcpkg-registry).
+My mods consume it through my own vcpkg registry, [marthofdoom/vcpkg-registry](https://github.com/marthofdoom/vcpkg-registry).
+
+### What changed from 3.7.0 (stage F1, verified on 1.6.1170.0 and 1.5.97.0)
+
+Each item is one commit, and the commit message carries the addresses and instructions that prove it.
+
+- An Address Library id that is not in the library stops the game with a message naming the id. Before, it
+  quietly used the next id's address. `IDDatabase::try_id2offset` is the quiet version for self-checks.
+- `SKSE::log::log_directory` uses the real AE id for the My Games folder name (502114, not 380738).
+- `REL::Module::IsExactly(version)` and `SKSE::RUNTIME_SSE_1_6_1170`, so code can check the exact build.
+- `BGSDefaultObjectManager` reads the real object and flag arrays of the exact build (366 objects and flags at
+  +0xB90 on 1.6.1170, 364 and +0xB80 on 1.5.97). Any other build is refused with a log line.
+- `CombatMagicCaster::GetMagicTarget` returns its 16-byte target the way the game does (a hidden out-slot).
+- `ControlMap`: the members after the context array move by 8 on 1.6.1170 (18 contexts, not 17), so they sit
+  behind `GetRuntimeData()`. `GetInputContext` maps kFavor to 17 there. `ToggleControls` calls the game's own
+  function.
+- `CombatController`: the members from +0x68 move by 8 on 1.6.1170, so they sit behind `GetRuntimeData()`.
+- New bindings from my upstream PRs: `Actor::StartCombat` (#107), the `ExtraDataList` constructor (#108, with a
+  heap size fix: the game object is 0x18 or 0x20 bytes, not 0x10), `SendInventoryUpdateMessage` (#109).
+- `REL::SelfCheck`: a consumer lists the ids it hooks with the RVAs its own disassembly found, and refuses a
+  hook whose id the loaded library places anywhere else.
+
+Nothing is guessed for other builds. VR and 1.7.x are not verified here, and the new accessors refuse them.
+Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()` there is the safe behaviour.
 
 Later changes come in stages. First come fixes I verified against the game's own code on 1.5.97 and 1.6.1170.
 Then comes support for 1.7.104 that I write from the file format and my own disassembly. No code from the GPL fork
