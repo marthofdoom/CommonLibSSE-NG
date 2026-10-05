@@ -34,9 +34,9 @@ namespace RE
 		void ReleaseTexture()
 		{
 			using func_t = decltype(&BSScaleformExternalTexture::ReleaseTexture);
-			// mit-3.7: AE id was 82317, retired (only in libraries up to 1.6.659). 443440 is its id from 1.6.1130 on:
-			// 1.6.1170 0xFAF570 is the 1.5.97 function (0xECDEE0) instruction for instruction (data/idmap-1.7.104-fixes.csv).
-			REL::Relocation<func_t> func{ RELOCATION_ID(80294, 443440) };
+			// mit-3.7: AE id 82317 up to 1.6.659, 443440 from 1.6.1130 on (the library renumbered it). 1.6.1170
+			// 0xFAF570 is the 1.5.97 function (0xECDEE0) instruction for instruction (data/idmap-1.7.104-fixes.csv).
+			REL::Relocation<func_t> func{ REL::RelocationIDByBuild(80294, 82317, 443440) };
 			return func(this);
 		}
 

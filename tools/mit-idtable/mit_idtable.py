@@ -231,6 +231,42 @@ def ver_name(v):
     return '-'.join(str(x) for x in v)
 
 
+def parse_corrections(a):
+    """--correct ID[,ID] + --correct-evidence CSV (id, previous_rva, new_rva, evidence): the audited way to change a
+    published RVA that was proven wrong. Every listed id needs exactly one evidence row with non-empty evidence."""
+    ids = set()
+    for item in a.correct or []:
+        for x in item.split(','):
+            if x.strip():
+                ids.add(parse_int(x, 'id'))
+    if not ids:
+        if a.correct_evidence:
+            raise SystemExit('--correct-evidence without --correct')
+        return {}
+    if not a.correct_evidence:
+        raise SystemExit('--correct needs --correct-evidence (a CSV: id,previous_rva,new_rva,evidence)')
+    rows = {}
+    with open(a.correct_evidence, newline='') as f:
+        for lineno, row in enumerate(csv.DictReader(f), start=2):
+            try:
+                i = parse_int(row['id'], 'id')
+                old = parse_int(row['previous_rva'], 'previous_rva')
+                new = parse_int(row['new_rva'], 'new_rva') if row['new_rva'].strip().lower() != 'absent' else 0
+            except (KeyError, ValueError) as e:
+                raise SystemExit('%s:%d: %s' % (a.correct_evidence, lineno, e))
+            if not (row.get('evidence') or '').strip():
+                raise SystemExit('%s:%d: id %d has no evidence' % (a.correct_evidence, lineno, i))
+            if i in rows:
+                raise SystemExit('%s:%d: id %d has two evidence rows' % (a.correct_evidence, lineno, i))
+            rows[i] = (old, new, row['evidence'].strip())
+    missing = sorted(ids - set(rows))
+    extra = sorted(set(rows) - ids)
+    if missing or extra:
+        raise SystemExit('--correct and --correct-evidence disagree: no evidence for %s, evidence but not --correct for %s'
+                         % (missing, extra))
+    return rows
+
+
 def module_name(a, exe):
     if a.module.lower() != exe.name.lower():
         print('warning: the executable file is named %r; the table names the module %r (the name the game runs '
@@ -249,18 +285,36 @@ def cmd_build(a):
         if r != 0 and (r >= exe.size_of_image or exe.section_of(r) is None):
             raise SystemExit('%s: id %d rva 0x%X is not inside %s' % (src, i, r, exe.name))
     records = sorted((i, r) for i, (r, _) in rows.items())
+    corrections = parse_corrections(a)
     if a.previous:
         # Distribution rule: a published table is a strict superset of the one before it.
         phdr, prec = unpack(open(a.previous, 'rb').read(), a.previous)
+        # The previous table must be for the same executable, or the comparison means nothing.
+        if (phdr['version'] != exe.version or phdr['time_date_stamp'] != exe.time_date_stamp or
+                phdr['size_of_image'] != exe.size_of_image):
+            raise SystemExit('%s is for game %s, TimeDateStamp 0x%08X, SizeOfImage 0x%X; --exe is %s, 0x%08X, 0x%X' % (
+                a.previous, '.'.join(map(str, phdr['version'])), phdr['time_date_stamp'], phdr['size_of_image'],
+                '.'.join(map(str, exe.version)), exe.time_date_stamp, exe.size_of_image))
         have = dict(records)
+        prev = dict(prec)
         lost = [i for i, _ in prec if i not in have]
         # a mapped id stays mapped at the same RVA; an absent id may only stay absent or become mapped
-        moved = [i for i, r in prec if i in have and have[i] != r and r != 0]
+        moved = [i for i, r in prec if i in have and have[i] != r and r != 0 and i not in corrections]
         if lost or moved:
-            raise SystemExit('not a superset of %s: %d ids dropped, %d ids changed RVA (first: %s)' % (
-                a.previous, len(lost), len(moved), (lost + moved)[:5]))
+            raise SystemExit('not a superset of %s: %d ids dropped, %d ids changed RVA (first: %s). A proven-wrong RVA '
+                             'is fixed with --correct and --correct-evidence.' % (
+                                 a.previous, len(lost), len(moved), (lost + moved)[:5]))
+        for i, (old, new, evidence) in sorted(corrections.items()):
+            if prev.get(i) != old:
+                raise SystemExit('--correct %d: the previous table has 0x%X, the evidence row says it had 0x%X' % (
+                    i, prev.get(i, 0), old))
+            if have.get(i) != new:
+                raise SystemExit('--correct %d: this build gives 0x%X, the evidence row says 0x%X' % (i, have.get(i, 0), new))
+            print('CORRECTION id %d: 0x%X -> 0x%X (%s)' % (i, old, new, evidence))
         if a.revision <= phdr['revision']:
             raise SystemExit('--revision %d must be above the previous table\'s %d' % (a.revision, phdr['revision']))
+    elif corrections:
+        raise SystemExit('--correct needs --previous (a correction is a change against a published table)')
     data = pack(exe.version, exe.time_date_stamp, exe.size_of_image, module, a.revision, records)
     out = a.out or file_name(exe.version)
     if os.path.isdir(out):
@@ -328,6 +382,10 @@ def main(argv=None):
                    help='table revision, 1 or more, higher than every table published before for this game version')
     b.add_argument('--previous', help='the last published table: the build refuses to drop or move any of its ids')
     b.add_argument('--module', default='SkyrimSE.exe', help='module name the game runs under (default: SkyrimSE.exe)')
+    b.add_argument('--correct', action='append', metavar='ID[,ID]',
+                   help='ids whose published RVA was proven wrong and may change against --previous (audited)')
+    b.add_argument('--correct-evidence', metavar='CSV',
+                   help='evidence for --correct: a CSV with id,previous_rva,new_rva,evidence (one row per id)')
     csv_args(b, True)
     b.set_defaults(func=cmd_build)
 

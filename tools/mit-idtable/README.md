@@ -47,6 +47,11 @@ This writes `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revisi
   id's RVA, make a mapped id absent, or keep the revision. Always pass it when you build a table to publish: every
   published table must be a strict superset of the one before (docs/MIT-ID-TABLE-FORMAT.md, "Revisions and
   distribution").
+  The previous table must be for the same executable (version, TimeDateStamp, SizeOfImage), or the build stops.
+- `--correct ID[,ID]` with `--correct-evidence CSV` is the one audited way to change an RVA a published table got
+  wrong. The CSV has `id,previous_rva,new_rva,evidence` (new_rva may be `absent`), one row per corrected id, with
+  non-empty evidence. The build checks each row against the previous table and the new build, prints every
+  correction, and still enforces the superset rule for every other id. Keep the evidence CSV with the release.
 - `--module NAME` is the module name the game runs under, `SkyrimSE.exe` by default. The tool warns when the
   executable you pass is named differently (for example a renamed copy), since the fork compares the name.
 - After writing, the tool reads its own output back under the same rules the fork applies.

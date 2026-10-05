@@ -199,16 +199,21 @@ here, the same as in 3.7.0. Nothing defines that macro in an NG build.
   - `VTABLE_BSTDerivedCreator_MovementMessageFreezeDirection_MovementMessage_` and
     `VTABLE_AutoRegisterCreator_MovementMessageFreezeDirection_..._MovementMessage_64__` had each other's AE ids
     (246208 and 246214). Swapped back.
-  - Four AE ids were retired after 1.6.659 and do not exist in the 1.6.1130, 1.6.1170 or 1.6.1179 libraries:
-    `GetCachedString` 69188 is now 443410, `Set_CStr` 11044 is now 439876, `SelectedRef` 405935 is now 504099,
-    `CompileAndRun` 21890 is now 441582. After the sync, `BSScaleformExternalTexture::ReleaseTexture` 82317 is now
-    443440, and `InventoryChanges::RemoveAllItems` 16118 is now 441567. With F1 a lookup of the old ids already stopped the game. Now they work.
+  - Six AE ids were renumbered by the Address Library at 1.6.1130. Each old id is in every library from 1.6.317
+    to 1.6.659 and in none from 1.6.1130 on, and each new id is in every library from 1.6.1130 on and in none
+    before it: `GetCachedString` 69188 / 443410, `Set_CStr` 11044 / 439876, `SelectedRef` 405935 / 504099,
+    `CompileAndRun` 21890 / 441582, and after the sync `BSScaleformExternalTexture::ReleaseTexture` 82317 / 443440
+    and `InventoryChanges::RemoveAllItems` 16118 / 441567. The new `REL::RelocationIDByBuild(se, aeBefore1130,
+    aeFrom1130)` picks the old id below 1.6.1130 and the new one from 1.6.1130 on (1.7.104 included, through the
+    id table). So these keep working on 1.6.317 to 1.6.659 as in 3.7.0, and from 1.6.1130 on, where the old ids
+    stopped the game since F1, they now work too.
   - `InventoryChanges::RemoveAllItems` 16118 is now 441567. From 1.6.1130 the game split the function: 441567 is a
     short entry with the same six arguments that calls the two halves of the old body, which is why body
     matching missed it. All four callers that have a twin in 1.5.97 call it at the same call site.
   - `VTABLE_std__bad_weak_ptr` (248775) has no vtable in any executable. It is kept so code still compiles, and is
     documented as absent.
-- The id table can mark an id as absent (known not to exist in that game version), and a lookup says so.
+- The id table can mark an id as absent (known not to exist in that game version), and a lookup says so. Absent
+  ids are kept out of `IDDatabase::Offset2ID`, the offset-to-id reverse map.
 - `REL::IDDatabase::get()` and `REL::Module::get()` check again under their lock. In 3.7.0 every thread that waited
   on the lock loaded the database again, rewriting it under readers.
 

@@ -84,6 +84,11 @@ namespace REL
                 const std::span<const mapping_t> id2offset = IDDatabase::get()._id2offset;
                 _offset2id.reserve(id2offset.size());
                 _offset2id.insert(_offset2id.begin(), id2offset.begin(), id2offset.end());
+                if (IDDatabase::get()._mitTableRevision != 0) {
+                    // mit-3.7: absent records (offset 0) are not addresses; keep them out of the
+                    // reverse map, so no offset ever maps back to an id the game does not have.
+                    std::erase_if(_offset2id, [](const mapping_t& a_elem) { return a_elem.offset == 0; });
+                }
                 std::sort(a_policy, _offset2id.begin(), _offset2id.end(), [](auto &&a_lhs, auto &&a_rhs) {
                         return a_lhs.offset < a_rhs.offset;
                 });
@@ -671,6 +676,49 @@ namespace REL
 #ifdef ENABLE_SKYRIM_VR
         std::uint64_t _vrID{0};
 #endif
+    };
+
+    /**
+     * mit-3.7: a RelocationID whose AE id the Address Library renumbered at 1.6.1130.
+     *
+     * For a few functions and globals, the AE id that every library from 1.6.317 to 1.6.659 has
+     * is absent from every library from 1.6.1130 on, and a different id names the same code there
+     * (verified per id on the libraries 317, 318, 323, 342, 353, 629, 640, 659, 1130, 1170 and
+     * 1179, and by disassembly; data/idmap-1.7.104-fixes.csv). This picks the old AE id below
+     * 1.6.1130 and the new one from 1.6.1130 on, which includes 1.7.104 through the MIT id table.
+     * SE and VR use the SE id, as a two-id RelocationID does. Use it anywhere a RelocationID goes:
+     * it converts on use, after the game version is known.
+     */
+    class RelocationIDByBuild
+    {
+    public:
+        constexpr RelocationIDByBuild(
+            std::uint64_t a_seID,
+            std::uint64_t a_aeIDBefore1130,
+            std::uint64_t a_aeIDFrom1130) noexcept :
+            _seID(a_seID),
+            _aeIDBefore1130(a_aeIDBefore1130),
+            _aeIDFrom1130(a_aeIDFrom1130)
+        {}
+
+        [[nodiscard]] std::uint64_t ae_id() const
+        {
+            return Module::get().version() < Version(1, 6, 1130, 0) ? _aeIDBefore1130 : _aeIDFrom1130;
+        }
+
+        operator RelocationID() const  // NOLINT(google-explicit-constructor): converts where a RelocationID is taken
+        {
+            return RelocationID(_seID, ae_id());
+        }
+
+        [[nodiscard]] std::uintptr_t address() const { return static_cast<RelocationID>(*this).address(); }
+        [[nodiscard]] std::size_t    offset() const { return static_cast<RelocationID>(*this).offset(); }
+        [[nodiscard]] std::uint64_t  id() const { return static_cast<RelocationID>(*this).id(); }
+
+    private:
+        std::uint64_t _seID;
+        std::uint64_t _aeIDBefore1130;
+        std::uint64_t _aeIDFrom1130;
     };
 
     class VariantID

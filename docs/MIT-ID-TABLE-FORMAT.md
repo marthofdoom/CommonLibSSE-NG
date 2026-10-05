@@ -132,7 +132,9 @@ manager installed last is the one every plugin gets. So:
    take ids away from every other plugin.
 2. **Each published table is a strict superset of the previous one.** No id is removed, no mapped id's RVA
    changes, no mapped id becomes absent, and tableRevision goes up. An absent id may become mapped, as a
-   correction. `mit_idtable.py build --previous <last published file>` enforces all of it.
+   correction. `mit_idtable.py build --previous <last published file>` enforces all of it. The one exception is
+   an RVA proven wrong: `--correct ID --correct-evidence CSV` changes it, with one evidence row per id, and the
+   build prints it. A wrong RVA runs the wrong code, so fixing it beats keeping the superset.
 3. **A plugin declares the lowest revision it needs**, right after `SKSE::Init`:
 
    ```cpp
