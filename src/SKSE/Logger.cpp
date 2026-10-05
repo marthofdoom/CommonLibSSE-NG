@@ -80,17 +80,40 @@ namespace SKSE
 			if SKYRIM_REL_VR_CONSTEXPR (REL::Module::IsVR()) {
 				path /= "Skyrim VR";
 			} else {
-				// mit-3.7: the AE id was 380738, which is NOT in the 1.6.1170 Address
-				// Library (versionlib-1-6-1170-0.bin). Upstream's lookup silently fell
-				// through to the next id, 380740 (RVA 0x20123C0), a pointer to
-				// "Skyrim.INI", so on AE this built "My Games\Skyrim.INI\SKSE". The real
-				// variable is id 502114, RVA 0x20123B0, which points at the .rdata string
-				// "Skyrim Special Edition" (RVA 0x1892F80). It is the AE twin of SE
-				// 508778 (RVA 0x1DEEBF0): six xrefs each with the same instruction
-				// shapes (SE 0x148CD9 mov rdx / 0x5AE0E0 mov rcx / 0x5AE102 mov rcx /
-				// 0x5AE825 mov rax / 0x5B742B mov r9 / 0x5B74BA; AE 0x191589 / 0x640214 /
-				// 0x640236 / 0x640CE5 / 0x64B1A8 / 0x64B284).
-				path /= *REL::Relocation<const char**>(RELOCATION_ID(508778, 502114)).get();
+				// mit-3.7: the game's own "My Games" folder name, read from the variable
+				// the game itself uses (a const char* to .rdata "Skyrim Special Edition").
+				// Its Address Library id depends on the build:
+				//   SE  1.5.x          508778 (1.5.97 RVA 0x1DEEBF0)
+				//   AE  1.6.317-1.6.659 380738 (in every versionlib from 317 to 659; not in
+				//                       1130 and later)
+				//   AE  1.6.1130+       502114 (1130 RVA 0x20053C0, 1170 RVA 0x20123B0,
+				//                       1179 RVA 0x20133C0; not in 659 and earlier)
+				// 1.6.1170 verified: 502114 points at "Skyrim Special Edition" (RVA
+				// 0x1892F80), the AE twin of SE 508778 by six xrefs of the same shape (SE
+				// 0x148CD9 / 0x5AE0E0 / 0x5AE102 / 0x5AE825 / 0x5B742B / 0x5B74BA; AE
+				// 0x191589 / 0x640214 / 0x640236 / 0x640CE5 / 0x64B1A8 / 0x64B284).
+				// Upstream 3.7.0 used 380738 everywhere, which on 1.6.1170 fell through to
+				// 380740 ("Skyrim.INI"). This function returns an optional, so a build
+				// whose library lacks the id is NEVER fatal: it is logged and returns
+				// nullopt (try_id2offset, not the fatal id2offset).
+				const auto& version = REL::Module::get().version();
+				std::uint64_t id = 508778;
+				if (REL::Module::IsAE()) {
+					id = version >= REL::Version(1, 6, 1130, 0) ? 502114 : 380738;
+				}
+				const auto offset = REL::IDDatabase::get().try_id2offset(id);
+				if (!offset) {
+					error("log_directory: Address Library id {} (game folder name) is not in the library for game version {}; no log directory"sv,
+						id, version.string("."sv));
+					return std::nullopt;
+				}
+				const auto name = *reinterpret_cast<const char* const*>(REL::Module::get().base() + *offset);
+				if (!name) {
+					error("log_directory: the game folder name (id {}) is null on game version {}; no log directory"sv,
+						id, version.string("."sv));
+					return std::nullopt;
+				}
+				path /= name;
 			}
 			path /= "SKSE"sv;
 

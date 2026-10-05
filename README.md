@@ -72,6 +72,19 @@ What came in:
   more. `AIProcess::forms` is now `equippedForms` (form plus equip slot). Upstream fix #93 for the default object
   pointer and #97 for the light-mod count are in.
 
+Other changes a consumer may have to adapt to:
+
+- `Actor::IsPointDeepUnderWater` is removed. `AnimationFileManagerSingleton` is removed.
+- `HighProcessData::subtitle` (+0x218) is now named `voiceSubtitle`. The old `voiceSubtitle` at +0xF0 is gone,
+  replaced by `currentMovementType`. Code that read `voiceSubtitle` now reads +0x218 without a compile error.
+- `AIProcess` `CachedValueData` is reordered: `value` at +0, `invalid` at +4 (was `dirty` at +0, `value` at +4).
+- `HitData::stagger` is a `float`, not a `std::uint32_t`.
+- `TESContainer` +0x14 is `allowStolenItems` (was padding).
+- `Console` gains `GetRuntimeData2()` and `TryGetExtendedConsoleData()`. Its fixed `sizeof` checks are gone.
+- `ControlMap::GetGamePadType()` is no longer `constexpr`. It reads through `GetRuntimeData()`, so it stops the
+  game on a build whose layout is not verified (VR, any AE before 1.6.1170). `SKSE::InputMap` calls it, so
+  `InputMap` gamepad lookups are fatal there too.
+
 How it meets the F1 corrections. Where both fixed the same thing, F1 wins:
 
 - The id miss stays fatal on every runtime. It moved into `REL/ID.h` with `try_id2offset`. `IsExactly` moved into
@@ -82,8 +95,11 @@ How it meets the F1 corrections. Where both fixed the same thing, F1 wins:
   reads through `GetRuntimeData()`. Upstream's new `PushInputContext` and `PopInputContext` translate `kFavor` to
   17 on 1.6.1170, the same as `GetInputContext`. Verified: Push (67243 / 68543) rejects an id at or above 0x11 on
   1.5.97 and 0x12 on 1.6.1170.
-- `log_directory` keeps reading the game's own folder name (508778 / 502114). Upstream guessed it from
-  `steam_api64.dll` on disk.
+- `log_directory` keeps reading the game's own folder name. Upstream guessed it from `steam_api64.dll` on disk.
+  The id now follows the build: 508778 on SE, 380738 on AE 1.6.317 to 1.6.659, 502114 on 1.6.1130 and later.
+  Each library from 317 to 659 has 380738 and not 502114, and each from 1130 on has 502114 and not 380738.
+  F1 used 502114 on every AE build, so with the fatal id miss it stopped the game on 1.6.640. The lookup now
+  uses `try_id2offset`. A build whose library lacks the id gets a log line and `nullopt`, never a stop.
 - `SKSE::RUNTIME_SSE_LATEST_AE` stays 1.6.678. Upstream added `RUNTIME_SSE_1_6_1330` as version 1.5.1330, a build
   that does not exist. It is left out.
 - The F1 code uses `std::format` now.
