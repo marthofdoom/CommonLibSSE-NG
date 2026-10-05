@@ -6,6 +6,23 @@ using namespace REL;
 
 namespace RE
 {
+	namespace
+	{
+		// mit-3.7: a PlayerCharacter member at the running build's offset. Upstream's
+		// RelocateMemberIfNewer(1.6.629, older, newer) stays the choice on every build but
+		// 1.7.104, where everything PlayerCharacter declares itself sits 8 bytes further
+		// than on 1.6.1170 (a new BSTEventSink<BSSystemEvent> base at +0x2D8; the proof is
+		// in PlayerCharacter.h at IsExactly1_7_104).
+		template <class T, class This>
+		[[nodiscard]] T& PlayerMember(This* a_self, std::ptrdiff_t a_older, std::ptrdiff_t a_newer)
+		{
+			if (PlayerCharacter::IsExactly1_7_104()) {
+				return REL::RelocateMember<T>(a_self, a_newer + 8);
+			}
+			return REL::RelocateMemberIfNewer<T>(SKSE::RUNTIME_SSE_1_6_629, a_self, a_older, a_newer);
+		}
+	}
+
 	void PlayerCharacter::PlayerSkills::AdvanceLevel(bool a_addThreshold)
 	{
 		using func_t = decltype(&PlayerCharacter::PlayerSkills::AdvanceLevel);
@@ -84,7 +101,7 @@ namespace RE
         if SKYRIM_REL_CONSTEXPR (REL::Module::IsVR()) {
             return REL::RelocateMember<ActorHandle>(this, 0, 0xE8C).get();
         } else {
-            return REL::RelocateMemberIfNewer<ActorHandle>(SKSE::RUNTIME_SSE_1_6_629, this, 0x894, 0x89C).get();
+            return PlayerMember<ActorHandle>(this, 0x894, 0x89C).get();
         }
 	}
 
@@ -107,7 +124,7 @@ namespace RE
 		if SKYRIM_REL_CONSTEXPR (Module::IsVR()) {
 			return nullptr;
 		} else {
-			return REL::RelocateMemberIfNewer<ObjectRefHandle>(SKSE::RUNTIME_SSE_1_6_629, this, 0x8C8, 0x8D0).get();
+			return PlayerMember<ObjectRefHandle>(this, 0x8C8, 0x8D0).get();
 		}
 	}
 
@@ -130,12 +147,12 @@ namespace RE
 		if SKYRIM_REL_VR_CONSTEXPR (REL::Module::IsVR()) {
 			return nullptr;
 		} else {
-			auto* tryOverlayTintMasks = REL::RelocateMemberIfNewer<BSTArray<TintMask*>*>(SKSE::RUNTIME_SSE_1_6_629, this, 0xB28, 0xB30);
+			auto* tryOverlayTintMasks = PlayerMember<BSTArray<TintMask*>*>(this, 0xB28, 0xB30);
 			if (!tryOverlayTintMasks) {
 				return nullptr;
 			}
 
-			auto& tintMasksValue = REL::RelocateMemberIfNewer<BSTArray<TintMask*>>(SKSE::RUNTIME_SSE_1_6_629, this, 0xB10, 0xB18);
+			auto& tintMasksValue = PlayerMember<BSTArray<TintMask*>>(this, 0xB10, 0xB18);
 			for (std::uint32_t i = 0; i < tintMasksValue.size(); ++i) {
 				if (tintMasksValue[i] == a_original) {
 					return i < tryOverlayTintMasks->size() ? (*tryOverlayTintMasks)[i] : nullptr;
@@ -151,8 +168,8 @@ namespace RE
 		if SKYRIM_REL_VR_CONSTEXPR (REL::Module::IsVR()) {
 			return nullptr;
 		} else {
-			auto* tryOverlayTintMasks = REL::RelocateMemberIfNewer<BSTArray<TintMask*>*>(SKSE::RUNTIME_SSE_1_6_629, this, 0xB28, 0xB30);
-			return tryOverlayTintMasks ? tryOverlayTintMasks : &REL::RelocateMemberIfNewer<BSTArray<TintMask*>>(SKSE::RUNTIME_SSE_1_6_629, this, 0xB10, 0xB18);
+			auto* tryOverlayTintMasks = PlayerMember<BSTArray<TintMask*>*>(this, 0xB28, 0xB30);
+			return tryOverlayTintMasks ? tryOverlayTintMasks : &PlayerMember<BSTArray<TintMask*>>(this, 0xB10, 0xB18);
 		}
 	}
 
@@ -173,7 +190,7 @@ namespace RE
             return static_cast<bool>(REL::RelocateMember<ActorHandle>(this, 0, 0xE8C));
         }
         else {
-            return static_cast<bool>(REL::RelocateMemberIfNewer<ActorHandle>(SKSE::RUNTIME_SSE_1_6_629, this, 0x894, 0x89C));
+            return static_cast<bool>(PlayerMember<ActorHandle>(this, 0x894, 0x89C));
         }
 	}
 
@@ -182,7 +199,7 @@ namespace RE
 		if SKYRIM_REL_CONSTEXPR (Module::IsVR()) {
 			return false;
 		} else {
-			return static_cast<bool>(REL::RelocateMemberIfNewer<ObjectRefHandle>(SKSE::RUNTIME_SSE_1_6_629, this, 0x8C8, 0x8D0));
+			return static_cast<bool>(PlayerMember<ObjectRefHandle>(this, 0x8C8, 0x8D0));
 		}
 	}
 

@@ -568,27 +568,62 @@ namespace RE
 		void                     StartGrabObject();
 		void                     UpdateCrosshairs();
 
+		// mit-3.7: 1.7.104 adds a 26th base, BSTEventSink<BSSystemEvent>, at +0x2D8, after the
+		// four sinks and before the three sources (RTTI ClassHierarchyDescriptor of
+		// .?AVPlayerCharacter@@: sources at +0x2E0 / +0x338 / +0x390, 1.6.1170 +0x2D8 / +0x330 /
+		// +0x388; the four sinks stay at +0x2B8..+0x2D0). Everything PlayerCharacter declares
+		// itself therefore moves by 8 against 1.6.1170. Proven on the constructor (1.6.1170
+		// 0x72CB40, 1.7.104 0x73F670, aligned instruction by instruction): every member store
+		// from +0x2D8 to +0xBE5 is at +8 on 1.7.104 and every store below +0x2D8 is unchanged;
+		// the only new stores are the new sink's vtable at 0x73F87A and a few extra zero-inits
+		// of existing members. sizeof is new(0xBE8) at 0x64A8BE and new(0xBF0) at 0x65D2AE.
+		// Character and Actor do not move (Character ctor 0x739180 is instruction-identical to
+		// 0x726650), and the vtable keeps its 303 slots. The accessors below return the
+		// 1.7.104 offset on exactly 1.7.104 and keep upstream's choice everywhere else.
+		[[nodiscard]] static bool IsExactly1_7_104() noexcept
+		{
+			return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104);
+		}
+
 		[[nodiscard]] inline BSTEventSource<BGSActorCellEvent>* AsBGSActorCellEventSource() noexcept {
+			if (IsExactly1_7_104()) {
+				return &REL::RelocateMember<BSTEventSource<BGSActorCellEvent>>(this, 0x2E0);
+			}
 			return &REL::RelocateMemberIfNewer<BSTEventSource<BGSActorCellEvent>>(SKSE::RUNTIME_SSE_1_6_629, this, 0x2D0, 0x2D8);
 		}
 
 		[[nodiscard]] inline const BSTEventSource<BGSActorCellEvent>* AsBGSActorCellEventSource() const noexcept {
+			if (IsExactly1_7_104()) {
+				return &REL::RelocateMember<const BSTEventSource<BGSActorCellEvent>>(this, 0x2E0);
+			}
 			return &REL::RelocateMemberIfNewer<BSTEventSource<BGSActorCellEvent>>(SKSE::RUNTIME_SSE_1_6_629, this, 0x2D0, 0x2D8);
 		}
 
 		[[nodiscard]] inline BSTEventSource<BGSActorDeathEvent>* AsBGSActorDeathEventSource() noexcept {
+			if (IsExactly1_7_104()) {
+				return &REL::RelocateMember<BSTEventSource<BGSActorDeathEvent>>(this, 0x338);
+			}
 			return &REL::RelocateMemberIfNewer<BSTEventSource<BGSActorDeathEvent>>(SKSE::RUNTIME_SSE_1_6_629, this, 0x328, 0x330);
 		}
 
 		[[nodiscard]] inline const BSTEventSource<BGSActorDeathEvent>* AsBGSActorDeathEventSource() const noexcept {
+			if (IsExactly1_7_104()) {
+				return &REL::RelocateMember<const BSTEventSource<BGSActorDeathEvent>>(this, 0x338);
+			}
 			return &REL::RelocateMemberIfNewer<BSTEventSource<BGSActorDeathEvent>>(SKSE::RUNTIME_SSE_1_6_629, this, 0x2D0, 0x330);
 		}
 
 		[[nodiscard]] inline BSTEventSource<PositionPlayerEvent>* AsPositionPlayerEventSource() noexcept {
+			if (IsExactly1_7_104()) {
+				return &REL::RelocateMember<BSTEventSource<PositionPlayerEvent>>(this, 0x390);
+			}
 			return &REL::RelocateMemberIfNewer<BSTEventSource<PositionPlayerEvent>>(SKSE::RUNTIME_SSE_1_6_629, this, 0x380, 0x388);
 		}
 
 		[[nodiscard]] inline const BSTEventSource<PositionPlayerEvent>* AsPositionPlayerEventSource() const noexcept {
+			if (IsExactly1_7_104()) {
+				return &REL::RelocateMember<const BSTEventSource<PositionPlayerEvent>>(this, 0x390);
+			}
 			return &REL::RelocateMemberIfNewer<BSTEventSource<PositionPlayerEvent>>(SKSE::RUNTIME_SSE_1_6_629, this, 0x380, 0x388);
 		}
 
@@ -790,17 +825,26 @@ namespace RE
 
 		[[nodiscard]] inline PLAYER_RUNTIME_DATA& GetPlayerRuntimeData() noexcept
 		{
+			if (IsExactly1_7_104()) {
+				return REL::RelocateMember<PLAYER_RUNTIME_DATA>(this, 0x3E8);
+			}
 			return REL::RelocateMemberIfNewer<PLAYER_RUNTIME_DATA>(SKSE::RUNTIME_SSE_1_6_629, this, 0x3D8, 0x3E0);
 		}
 
 		[[nodiscard]] inline const PLAYER_RUNTIME_DATA& GetPlayerRuntimeData() const noexcept
 		{
+			if (IsExactly1_7_104()) {
+				return REL::RelocateMember<const PLAYER_RUNTIME_DATA>(this, 0x3E8);
+			}
 			return REL::RelocateMemberIfNewer<PLAYER_RUNTIME_DATA>(SKSE::RUNTIME_SSE_1_6_629, this, 0x3D8, 0x3E0);
 		}
 
 		[[nodiscard]] inline CrimeValue& GetCrimeValue() noexcept
 		{
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsAE()) {
+				if (IsExactly1_7_104()) {
+					return REL::RelocateMember<CrimeValue>(this, 0x3F0);
+				}
 				if (REL::Module::get().version().compare(SKSE::RUNTIME_SSE_1_6_629) != std::strong_ordering::less) {
 					return REL::RelocateMember<CrimeValue>(this, 0x3E8);
 				}
@@ -811,6 +855,9 @@ namespace RE
 		[[nodiscard]] inline const CrimeValue& GetCrimeValue() const noexcept
 		{
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsAE()) {
+				if (IsExactly1_7_104()) {
+					return REL::RelocateMember<CrimeValue>(this, 0x3F0);
+				}
 				if (REL::Module::get().version().compare(SKSE::RUNTIME_SSE_1_6_629) != std::strong_ordering::less) {
 					return REL::RelocateMember<CrimeValue>(this, 0x3E8);
 				}
@@ -821,6 +868,9 @@ namespace RE
 		[[nodiscard]] inline RaceData& GetRaceData() noexcept
 		{
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsAE()) {
+				if (IsExactly1_7_104()) {
+					return REL::RelocateMember<RaceData>(this, 0xB40);
+				}
 				if (REL::Module::get().version().compare(SKSE::RUNTIME_SSE_1_6_629) != std::strong_ordering::less) {
 					return REL::RelocateMember<RaceData>(this, 0xB38);
 				}
@@ -831,6 +881,9 @@ namespace RE
 		[[nodiscard]] inline const RaceData& GetRaceData() const noexcept
 		{
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsAE()) {
+				if (IsExactly1_7_104()) {
+					return REL::RelocateMember<RaceData>(this, 0xB40);
+				}
 				if (REL::Module::get().version().compare(SKSE::RUNTIME_SSE_1_6_629) != std::strong_ordering::less) {
 					return REL::RelocateMember<RaceData>(this, 0xB38);
 				}
@@ -841,6 +894,9 @@ namespace RE
 		[[nodiscard]] inline GameStateData& GetGameStatsData() noexcept
 		{
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsAE()) {
+				if (IsExactly1_7_104()) {
+					return REL::RelocateMember<GameStateData>(this, 0xB08);
+				}
 				if (REL::Module::get().version().compare(SKSE::RUNTIME_SSE_1_6_629) != std::strong_ordering::less) {
 					return REL::RelocateMember<GameStateData>(this, 0xB00);
 				}
@@ -851,6 +907,9 @@ namespace RE
 		[[nodiscard]] inline const GameStateData& GetGameStatsData() const noexcept
 		{
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsAE()) {
+				if (IsExactly1_7_104()) {
+					return REL::RelocateMember<GameStateData>(this, 0xB08);
+				}
 				if (REL::Module::get().version().compare(SKSE::RUNTIME_SSE_1_6_629) != std::strong_ordering::less) {
 					return REL::RelocateMember<GameStateData>(this, 0xB00);
 				}
@@ -861,6 +920,9 @@ namespace RE
 		[[nodiscard]] inline INFO_RUNTIME_DATA& GetInfoRuntimeData() noexcept
 		{
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsAE()) {
+				if (IsExactly1_7_104()) {
+					return REL::RelocateMember<INFO_RUNTIME_DATA>(this, 0x8E0);
+				}
 				if (REL::Module::get().version().compare(SKSE::RUNTIME_SSE_1_6_629) != std::strong_ordering::less) {
 					return REL::RelocateMember<INFO_RUNTIME_DATA>(this, 0x8D8);
 				}
@@ -871,6 +933,9 @@ namespace RE
 		[[nodiscard]] inline const INFO_RUNTIME_DATA& GetInfoRuntimeData() const noexcept
 		{
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsAE()) {
+				if (IsExactly1_7_104()) {
+					return REL::RelocateMember<INFO_RUNTIME_DATA>(this, 0x8E0);
+				}
 				if (REL::Module::get().version().compare(SKSE::RUNTIME_SSE_1_6_629) != std::strong_ordering::less) {
 					return REL::RelocateMember<INFO_RUNTIME_DATA>(this, 0x8D8);
 				}
