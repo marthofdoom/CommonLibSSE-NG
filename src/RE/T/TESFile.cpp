@@ -1,5 +1,7 @@
 #include "RE/T/TESFile.h"
 
+#include "SKSE/Version.h"
+
 namespace RE
 {
 	bool TESFile::CloseTES(bool a_force)
@@ -64,6 +66,17 @@ namespace RE
 
 	bool TESFile::SeekNextForm(bool a_skipIgnored)
 	{
+		if (REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104)) {
+			// mit-3.7: on 1.7.104 the function (id 13979, 0x1CD400) takes a third bool. It is read
+			// into edi (0x1CD416 movzx edi,r8b), passed to the inner seek (0x1CD436, 0x1CD5F0) and
+			// tested before the call at 0x1CD547 (test dil,dil / jne skip). 1.6.1170 (0x1C7D30)
+			// always makes that call (0x1C7EA6), so false keeps the 1.6.1170 behaviour; false is also
+			// what the engine's own callers pass (xor r8d,r8d at 0x1BB7BB, 0x1C0FC6, 0x1FA8A8 and
+			// most of the 40 call sites). Without it r8b would be whatever the caller left there.
+			using func17_t = bool(TESFile*, bool, bool);
+			REL::Relocation<func17_t> func{ RELOCATION_ID(13894, 13979) };
+			return func(this, a_skipIgnored, false);
+		}
 		using func_t = decltype(&TESFile::SeekNextForm);
 		REL::Relocation<func_t> func{ RELOCATION_ID(13894, 13979) };
 		return func(this, a_skipIgnored);

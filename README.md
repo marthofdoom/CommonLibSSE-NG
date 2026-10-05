@@ -212,6 +212,17 @@ here, the same as in 3.7.0. Nothing defines that macro in an NG build.
     matching missed it. All four callers that have a twin in 1.5.97 call it at the same call site.
   - `VTABLE_std__bad_weak_ptr` (248775) has no vtable in any executable. It is kept so code still compiles, and is
     documented as absent.
+- `SkyrimVM` gained two event-sink bases on 1.7.104 (`TESAmiiboTouchEvent` at +0x180,
+  `TESAmiiboForcedStopDetectionEvent` at +0x188), so every member it declares sits 0x10 further: `impl` is at
+  +0x210, not +0x200. Before this fix, `BSScript::Internal::VirtualMachine::GetSingleton()` read a spin lock there
+  on 1.7.104 and returned null or a garbage pointer. The members now sit behind `SkyrimVM::GetRuntimeData()`
+  (+0x200, or +0x210 on 1.7.104), and `AsStatsEventSource()` finds the moved event source.
+- `TESFile::SeekNextForm` takes a third bool on 1.7.104. The fork passes false, which keeps the 1.6.1170
+  behaviour and is what the engine's own callers pass.
+- Two ids whose 1.7.104 bodies changed were re-proven and kept: `TESFile::SeekNextForm` (13979, 0x1CD400, the
+  same function with the new argument) and `BSScaleformManager::IsValidName` (82331, 0x1170450, the same entry and
+  arguments, with an added check for the Japanese and Chinese languages). Four callers whose bytes are identical
+  in both builds call 0x1170450 at the same offset.
 - The id table can mark an id as absent (known not to exist in that game version), and a lookup says so. Absent
   ids are kept out of `IDDatabase::Offset2ID`, the offset-to-id reverse map.
 - `REL::IDDatabase::get()` and `REL::Module::get()` check again under their lock. In 3.7.0 every thread that waited
@@ -273,22 +284,41 @@ The table in `data/` is revision 3.
 - On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
   `GetDevice` and `GetVirtualKeyboard` handle that. The device number inside its input events is not verified.
 
+## How the 1.7.104 layouts are proven
+
+- **Class hierarchies.** The RTTI base-class arrays of every class in both executables were diffed (8,557 classes
+  in 1.6.1170, 8,636 in 1.7.104). Only five hierarchies differ. Two really change layout and are handled here:
+  `PlayerCharacter` (one new sink base, everything it declares moves by 8) and `SkyrimVM` (two new sink bases,
+  everything it declares moves by 0x10). In the other three, `AudioLoadForPlaybackTask`, `AudioLoadToCacheTask` and
+  `BShkbUtils::ProspectiveEventClipAddingFunctor`, only the compiler's anonymous-namespace name of a base changed
+  (`?A0x69aaf5a1` vs `?A0x207ffa87`, `?A0x74e2f8f3` vs `?A0x3d37f7d5`). Their base offsets are the same, and the fork
+  declares no members for them.
+- **Member offsets.** For a class whose layout changed, the constructors of both builds are aligned instruction by
+  instruction and every member store is compared, and the engine's own reads through the singleton or `this` are
+  counted per offset (for example `SkyrimVM`: 59 reads of `+0x200` on 1.6.1170, 59 of `+0x210` on 1.7.104).
+- **Virtual tables.** Slot counts are compared per vtable, and the slots of a changed table are anchored to their
+  1.6.1170 twins.
+- **Functions.** Where a mapped function's body changed size, its arguments are compared too. `TESFile::SeekNextForm`
+  takes a third argument on 1.7.104 and the fork passes it (see the changelog).
+
 ## Known 1.7.104 differences this fork does not handle yet
 
-The full mapping flagged these classes as changed on 1.7.104. Their declarations here are the 1.6.1170 ones, so a
-plugin that overrides or calls their virtual functions, or reads their members, on 1.7.104 is NOT safe yet:
+These are virtual-table changes, not hierarchy changes. The declarations here are the 1.6.1170 ones, so a plugin
+that overrides or calls the affected virtual functions on 1.7.104 is NOT safe yet:
 
-- Input handlers gained two virtual functions near the top of the table (slot 4 is slot 6 on 1.7.104):
-  `PlayerInputHandler` and its subclasses (Movement, Look, Sprint, ReadyWeapon, AutoMove, ToggleRun, Run, Jump,
-  Sneak, Shout, TogglePOV, Activate, AttackBlock, HeldState), `MenuEventHandler` and its subclasses (Click,
-  Direction, ConsoleOpen, MenuOpen, Favorites, Screenshot, QuickSaveLoad, the map handlers).
-- Camera states gained two virtual functions: `TESCameraState` subclasses (ThirdPerson, FirstPerson, Free, Dragon,
-  Horse, Bleedout).
-- Several menus' input-handler bases (Cursor, Favorites, Lockpicking, Mist, RaceSex, Stats, Journal, ModManager),
-  `Inventory3DManager`, `BSGamerProfile`, `BSSystemUtility` and `BSSaveDataSystemUtility`.
-- `SkyrimVM` gained two event-sink bases (Amiibo events), so its sink subobjects move.
+- `PlayerInputHandler` and `MenuEventHandler` gained two virtual functions at slots 2 and 3, so every later slot
+  moves by 2 (`ProcessThumbstick`, `ProcessMouseMove`, `ProcessButton`, and `ProcessKinect` on MenuEventHandler).
+  Evidence: the slot anchors of their subclasses (movement handlers 4 -> 6, Favorites 2 -> 4 and 5 -> 7, map
+  handlers 3 -> 5, 4 -> 6, 5 -> 7). This reaches every class that has one of them as a base: the player input
+  handlers (Movement, Look, Sprint, ReadyWeapon, AutoMove, ToggleRun, Run, Jump, Sneak, Shout, TogglePOV, Activate,
+  AttackBlock, HeldState), the menu handlers (Click, Direction, ConsoleOpen, MenuOpen, Favorites, Screenshot,
+  QuickSaveLoad, the map handlers), the camera states through their PlayerInputHandler base (their own
+  TESCameraState table is unchanged), and the menus that are also a MenuEventHandler (Cursor, Favorites,
+  Lockpicking, Mist, RaceSex, Stats, Journal, ModManager).
+- Their own virtual tables grew: `Inventory3DManager`, `BSGamerProfile`, `BSSystemUtility` and
+  `BSSaveDataSystemUtility`.
 
-The full list, with the evidence, is in `data/summary-1.7.104-fork-full.md` ("layout flags").
+The evidence is in `data/summary-1.7.104-fork-full.md` ("layout flags").
 
 ## Source-breaking changes and migration
 
@@ -301,6 +331,7 @@ offset on some verified build, and a compile error is better than a wrong read.
 | `CombatController` members from +0x68 (`cachedTarget`, `handleCount`, ...) | `GetRuntimeData().<member>` | they move by 8 on 1.6.1170 and 1.7.104 |
 | `CombatMagicCaster::GetMagicTarget` returning `void*` | returns `MagicTarget` (`{handle, actor}`) | the game returns 16 bytes through a hidden out-slot |
 | `ControlMap::ToggleControls(flags, enable)` | gains `storeState` (default `true`) | it calls the game's own function now |
+| `SkyrimVM` members (`impl`, `handlePolicy`, `objectBindPolicy`, ...) | `GetRuntimeData().<member>` | they move by 0x10 on 1.7.104 |
 | `BSInputEventQueue::buttonEvents`, `charEvents`, `mouseEvents`, `thumbstickEvents`, `connectEvents`, `kinectEvents`, `queueHead`, `queueTail` | `GetButtonEvents()`, `GetCharEvents()`, `GetMouseEvents()`, `GetThumbstickEvents()`, `GetConnectEvents()`, `GetKinectEvents()`, `GetQueueHead()`, `GetQueueTail()` | they move on 1.7.104 |
 
 Not a compile error, but wrong on 1.7.104 if used directly:
