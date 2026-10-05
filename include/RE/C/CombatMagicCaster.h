@@ -27,7 +27,9 @@ namespace RE
 		// a passive probe built on it crashed the game).
 		// Verified: base impl 1.6.1170 0x81E020 (slot 0A of 15 of the 16 caster
 		// vtables; mov rdi,rdx / mov rbx,r8 / mov [rdi],eax / mov rax,rdi /
-		// mov [rdi+8],rcx), 1.5.97 0x781CB0 (-> helper 0x782100, same {u32 @0, ptr @8});
+		// mov [rdi+8],rcx), 1.7.104 0x833510 (the same instructions: mov rbx,r8 /
+		// mov rdi,rdx / mov [rdi],eax / mov rax,rdi / mov [rdi+8],rcx),
+		// 1.5.97 0x781CB0 (-> helper 0x782100, same {u32 @0, ptr @8});
 		// Reanimate override 1.6.1170 0x8222C0 / 1.5.97 0x785F60 (mov eax,[rcx+0x28] /
 		// mov [rdx],eax / mov rax,rdx / mov qword [rdx+8],0).
 		// Engine consumers read `handle` first and `actor` only when handle is 0.

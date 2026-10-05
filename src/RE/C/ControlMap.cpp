@@ -17,19 +17,20 @@ namespace RE
 		// mit-3.7: the verified builds. See ControlMap.h for the evidence.
 		bool IsAE1170() noexcept { return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170); }
 		bool IsSE197() noexcept { return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_5_97); }
+		bool Is17104() noexcept { return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104); }
 
 		std::string UnverifiedMessage(std::string_view a_what)
 		{
 			return fmt::format(
 				"ControlMap::{}: the ControlMap layout is not verified for game version {} "
-				"(verified: 1.6.1170.0, 1.5.97.0)."sv,
+				"(verified: 1.6.1170.0, 1.5.97.0, 1.7.104.0)."sv,
 				a_what, REL::Module::get().version().string("."sv));
 		}
 	}
 
 	bool ControlMap::IsRuntimeDataVerified() noexcept
 	{
-		return IsAE1170() || IsSE197();
+		return IsAE1170() || IsSE197() || Is17104();
 	}
 
 	ControlMap::RUNTIME_DATA& ControlMap::GetRuntimeData() noexcept
@@ -44,6 +45,8 @@ namespace RE
 			offset = 0xF0;
 		} else if (IsSE197()) {
 			offset = 0xE8;
+		} else if (Is17104()) {
+			offset = 0xF0;
 		} else {
 			stl::report_and_fail(UnverifiedMessage("GetRuntimeData"sv));
 		}
@@ -61,6 +64,10 @@ namespace RE
 		} else if (IsSE197()) {
 			count = 17;
 			index = stl::to_underlying(a_context);
+		} else if (Is17104()) {
+			count = 18;
+			// Same 18 contexts as 1.6.1170 (see ControlMap.h): kFavor is 17.
+			index = a_context == InputContextID::kFavor ? 17 : stl::to_underlying(a_context);
 		} else {
 			static std::atomic_flag reported = ATOMIC_FLAG_INIT;
 			if (!reported.test_and_set()) {
