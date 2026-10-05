@@ -48,13 +48,13 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1.10.0
 
       - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v10.0
+        uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: true
 
       - name: Build
-        uses: lukka/run-cmake@v10.0
+        uses: lukka/run-cmake@v11
         with:
           cmakeListsTxtPath: ${{ github.workspace }}/main/CMakeLists.txt
           configurePreset: build-${{ matrix.build-type }}-${{ matrix.compiler }}-vcpkg-${{ matrix.runtime }}
@@ -96,14 +96,17 @@ jobs:
           version: 1.66.0
 
       - name: Detect Conan profile
-        run: conan profile new default --detect --force
+        run: |
+          conan profile new default --detect --force
+          # Conan 1.x does not know the VS 2026 toolset (detects '15'); the generator is Ninja so 193 is only a settings label.
+          conan profile update settings.compiler.version=193 default
 
       - name: Run Conan
         working-directory: ${{ github.workspace }}/main
         run: conan install --build=missing -o commonlibsse-ng:testing=True .
 
       - name: Build with CMake
-        uses: lukka/run-cmake@v10.0
+        uses: lukka/run-cmake@v11
         with:
           cmakeListsTxtPath: ${{ github.workspace }}/main/CMakeLists.txt
           configurePreset: build-${{ matrix.build-type }}-${{ matrix.compiler }}-conan-${{ matrix.runtime }}
