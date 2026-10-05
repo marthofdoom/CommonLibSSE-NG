@@ -142,10 +142,10 @@ namespace RE
 		// 0xCD5530) walk the same stack. The enum is numbered as on 1.5.97, so kFavor is
 		// translated to 17 on 1.6.1170 exactly as GetInputContext does. Unverified builds
 		// are refused (one critical log line, no call).
-		std::optional<std::uint32_t> RuntimeContextId(InputContextID a_context, std::string_view a_what)
+		std::optional<std::uint32_t> RuntimeContextId(ControlMap::InputContextID a_context, std::string_view a_what)
 		{
 			if (IsAE1170()) {
-				return a_context == InputContextID::kFavor ? 17u : static_cast<std::uint32_t>(std::to_underlying(a_context));
+				return a_context == ControlMap::InputContextID::kFavor ? 17u : static_cast<std::uint32_t>(std::to_underlying(a_context));
 			}
 			if (IsSE197()) {
 				return static_cast<std::uint32_t>(std::to_underlying(a_context));
