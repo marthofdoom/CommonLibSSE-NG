@@ -54,7 +54,7 @@ jobs:
           doNotCache: true
 
       - name: Build
-        uses: lukka/run-cmake@v11
+        uses: lukka/run-cmake@v10.9
         with:
           cmakeListsTxtPath: ${{ github.workspace }}/main/CMakeLists.txt
           configurePreset: build-${{ matrix.build-type }}-${{ matrix.compiler }}-vcpkg-${{ matrix.runtime }}
@@ -106,7 +106,7 @@ jobs:
         run: conan install --build=missing -o commonlibsse-ng:testing=True .
 
       - name: Build with CMake
-        uses: lukka/run-cmake@v11
+        uses: lukka/run-cmake@v10.9
         with:
           cmakeListsTxtPath: ${{ github.workspace }}/main/CMakeLists.txt
           configurePreset: build-${{ matrix.build-type }}-${{ matrix.compiler }}-conan-${{ matrix.runtime }}
