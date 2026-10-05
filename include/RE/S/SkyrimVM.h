@@ -18,8 +18,8 @@
 #include "RE/S/SavePatcher.h"
 #include "RE/S/SimpleAllocMemoryPagePolicy.h"
 #include "RE/S/SkyrimScriptObjectBindPolicy.h"
-#include "SKSE/Version.h"
 #include "RE/S/SkyrimScriptStore.h"
+#include "SKSE/Version.h"
 
 namespace RE
 {
@@ -322,6 +322,25 @@ namespace RE
 		{
 			return &REL::RelocateMember<BSTEventSource<BSScript::StatsEvent>>(this, IsExactly1_7_104() ? 0x1B8 : 0x1A8);
 		}
+
+		[[nodiscard]] const BSTEventSource<BSScript::StatsEvent>* AsStatsEventSource() const noexcept
+		{
+			return &REL::RelocateMember<const BSTEventSource<BSScript::StatsEvent>>(this, IsExactly1_7_104() ? 0x1B8 : 0x1A8);
+		}
+
+		// mit-3.7: the event-source API inherited from BSTEventSource<BSScript::StatsEvent> is
+		// deleted on SkyrimVM. Called on SkyrimVM it uses the base at its declared +0x1A8, which on
+		// 1.7.104 is the BSTEventSink<StatsEvent> vtable pointer (the source is at +0x1B8 there), so
+		// AddEventSink / RemoveEventSink / SendEvent would write into the wrong object. Use
+		// AsStatsEventSource()->AddEventSink(...) and so on; that is right on every build.
+		template <class... Args>
+		void AddEventSink(Args&&...) = delete;
+		template <class... Args>
+		void RemoveEventSink(Args&&...) = delete;
+		template <class... Args>
+		void SendEvent(Args&&...) = delete;
+		template <class... Args>
+		void operator()(Args&&...) = delete;
 	};
 	static_assert(sizeof(SkyrimVM) == 0x200);  // the bases; RUNTIME_DATA follows at the build's offset
 }

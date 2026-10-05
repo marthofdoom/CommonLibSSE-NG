@@ -223,6 +223,34 @@ here, the same as in 3.7.0. Nothing defines that macro in an NG build.
   same function with the new argument) and `BSScaleformManager::IsValidName` (82331, 0x1170450, the same entry and
   arguments, with an added check for the Japanese and Chinese languages). Four callers whose bytes are identical
   in both builds call 0x1170450 at the same offset.
+- The StatsEvent source's `AddEventSink`, `RemoveEventSink`, `SendEvent` and `operator()` are deleted on
+  `SkyrimVM`: they compiled through the base class and, on 1.7.104, wrote into the sink's vtable pointer. Use
+  `AsStatsEventSource()` (const and non-const).
+- `UI_MESSAGE_TYPE`: 1.7.104 inserted a message type at 13, so `kChatterEvent` is 14 there. 0 to 12 did not move.
+  Proof: the UIMessage default constructor, inlined in `UIMessageQueue::AddMessage` (13631) and
+  `ConsoleLog::VPrint` (51110), stores the last value, 0xD on 1.6.1170 (0x1AF330, 0x8F93F3) and 0xE on 1.7.104
+  (0x1B48C0, 0x90F3B3). The engine's AddMessage callers (203 on 1.6.1170, 205 on 1.7.104) pass the same types. 1.7.104's
+  `MarketplaceMenu::ProcessMessage` (0x57F390) handles a type 13 (0x57F3A3) that 1.6.1170's (0x577410) does not.
+  New: `UI_MESSAGE_TYPE::k1_7_104_Type13`, `ToRuntimeUIMessageType`, `FromRuntimeUIMessageType` and
+  `UIMessage::GetType()`. `UIMessageQueue::AddMessage` translates, and refuses `k1_7_104_Type13` with a log line on
+  any other build.
+- Checked and needing no code change:
+  - `BSShaderTextureSet::Ctor` uses id 99886, which is a 1.5.97 id (0x12C9320). Only the 1.5.97 branch of
+    `BSShaderTextureSet::Create` calls it. On AE builds, 1.7.104 included, `Create` calls the game's own Create
+    (107172, 1.7.104 0x153B520), so 99886 is never looked up there. The table's absent record for 99886 is right:
+    no AE library has it.
+  - `PACKAGE_PROCEDURE_TYPE` did not change. The package type name table is the same on both builds (Find at 0
+    to Movement Blocked at 36: 1.6.1170 0x200F790, 1.7.104 0x20B2B70). `Actor::EndInterruptPackage` (37474) on
+    1.7.104 only treats `kCannibal` (38) like `kVampireFeed` (37) (0x687268 / 0x68726E, `packData.packType` at
+    +0x24).
+- Notes for a future wrapper (the fork does not wrap these):
+  - Ids 13980 (1.7.104 0x1CD5F0) and 13981 (0x1CD780), the TESFile helpers next to `SeekNextForm`, also take a
+    new bool on 1.7.104 (`movzx esi,dl` / `movzx edi,dl`). Pass false, as for `SeekNextForm`.
+  - `Projectile::Launch` (44108) keeps its arguments. Its body loads a different constant before one call
+    (`mov ecx,0x15D` on 1.6.1170, `0x163` on 1.7.104), an engine-internal index.
+  - `BGSSaveLoadManager` Save and Load (35727, 35728, 35766) keep their arguments. Inside, they call an engine
+    helper's virtual functions six slots further on (`[r10+0x38]` -> `[r10+0x68]`, `[r9+0x88]` -> `[r9+0xB8]`).
+    That class is not declared here.
 - The id table can mark an id as absent (known not to exist in that game version), and a lookup says so. Absent
   ids are kept out of `IDDatabase::Offset2ID`, the offset-to-id reverse map.
 - `REL::IDDatabase::get()` and `REL::Module::get()` check again under their lock. In 3.7.0 every thread that waited
@@ -317,6 +345,8 @@ that overrides or calls the affected virtual functions on 1.7.104 is NOT safe ye
   Lockpicking, Mist, RaceSex, Stats, Journal, ModManager).
 - Their own virtual tables grew: `Inventory3DManager`, `BSGamerProfile`, `BSSystemUtility` and
   `BSSaveDataSystemUtility`.
+- Planned: per-build slot helpers for the PlayerInputHandler / MenuEventHandler shift, so a handler can be
+  written once for every build.
 
 The evidence is in `data/summary-1.7.104-fork-full.md` ("layout flags").
 
@@ -345,6 +375,16 @@ Not a compile error, but wrong on 1.7.104 if used directly:
   `GetObject`.
 - Fields of `PlayerCharacter` that a single-runtime build declares inline are only right for that runtime. Use the
   accessors (`GetPlayerRuntimeData()` and the others).
+- `SkyrimVM` used through a base class at +0x180 or above. On 1.7.104 these bases sit 0x10 further than C++ puts
+  them: `BSTEventSink<TESPlayerBowShotEvent>`, `BSTEventSink<TESFastTravelEndEvent>`,
+  `BSTEventSink<PositionPlayerEvent>`, `BSTEventSink<BSScript::StatsEvent>`, `BSTEventSource<BSScript::StatsEvent>`
+  and the singleton base. Converting a `SkyrimVM*` to one of them, or calling `ProcessEvent` on one of those sinks
+  through a `SkyrimVM*`, uses the wrong subobject there. The StatsEvent source's own `AddEventSink`,
+  `RemoveEventSink`, `SendEvent` and `operator()` are deleted on `SkyrimVM`, so those fail to compile. Use
+  `AsStatsEventSource()`. The bases below +0x180 are where C++ puts them on every build.
+- `UIMessage::type` holds the game's own number. On 1.7.104 `kChatterEvent` is 14 and 13 is a type only 1.7.104
+  has. Use `UIMessage::GetType()` to read it, and `ToRuntimeUIMessageType` / `FromRuntimeUIMessageType` anywhere
+  else you exchange a type with the game. `UIMessageQueue::AddMessage` translates for you.
 
 ---
 

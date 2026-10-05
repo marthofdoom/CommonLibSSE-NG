@@ -2,6 +2,7 @@
 
 #include "RE/B/BSFixedString.h"
 #include "RE/U/UIMessage.h"
+#include "SKSE/Logger.h"
 
 namespace RE
 {
@@ -15,7 +16,12 @@ namespace RE
 	{
 		using func_t = decltype(&UIMessageQueue::AddMessage);
 		REL::Relocation<func_t> func{ Offset::UIMessageQueue::AddMessage };
-		return func(this, a_menuName, a_type, a_data);
+		// mit-3.7: the game's own number for the type (kChatterEvent is 14 on 1.7.104).
+		if (a_type == UI_MESSAGE_TYPE::k1_7_104_Type13 && !REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104)) {
+			SKSE::log::error("UIMessageQueue::AddMessage: k1_7_104_Type13 exists only on 1.7.104; message to {} not sent.", a_menuName.c_str());
+			return;
+		}
+		return func(this, a_menuName, static_cast<UI_MESSAGE_TYPE>(ToRuntimeUIMessageType(a_type)), a_data);
 	}
 
 	IUIMessageData* UIMessageQueue::CreateUIMessageData(const BSFixedString& a_name)
