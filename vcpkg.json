@@ -7,7 +7,7 @@
   "homepage": "https://github.com/CharmedBaryon/CommonLibSSE",
   "license": "MIT",
   "supports": "windows & x64",
-  "builtin-baseline": "fc3f61366102c1f0d4547c06d03c523bb18c13a7",
+  "builtin-baseline": "19780d9cdf84d0944cf9a318666703b89ab6629c",
   "dependencies": [
     {
       "name": "vcpkg-cmake-config",
