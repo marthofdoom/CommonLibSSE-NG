@@ -25,7 +25,7 @@ note in the commit is the reason.
 |---|---|---|
 | **1.5.97.0** | the Address Library, `version-1-5-97-0.bin` | verified |
 | **1.6.1170.0** | the Address Library, `versionlib-1-6-1170-0.bin` | verified |
-| **1.7.104.0** (Steam) | this fork's own id table, `mit-idtable-v1-1-7-104-0.bin` (see below) | verified |
+| **1.7.104.0** (Steam) | this fork's own id table, built into every plugin (see below) | verified |
 | other 1.5.x and 1.6.x | the Address Library | upstream 3.7.0 values, not verified. The exact-build accessors refuse them by name. |
 | other 1.7.x | none. The plugin stops at load with a message. | none |
 | VR | the VR Address Library CSV | upstream 3.7.0 values, not verified |
@@ -73,8 +73,8 @@ fork, so a newer fork needs a newer baseline. The port version goes up with ever
 caches vcpkg packages, put `vcpkg-configuration.json` in the cache key, or an old build of the library hides the
 new one.
 
-On 1.7.104 your plugin also needs the id table, as a mod requirement, never bundled (see below). Build with AE
-enabled (the default multi-runtime build does): 1.7.104 uses the AE ids, so an SE-only build stops on its first id
+On 1.7.104 your plugin needs nothing else. The id table is built into the library, so it is inside your DLL and
+players install nothing for it (see below). Build with AE enabled (the default multi-runtime build does): 1.7.104 uses the AE ids, so an SE-only build stops on its first id
 there.
 
 ## What changed from 3.7.0
@@ -258,21 +258,35 @@ here, the same as in 3.7.0. Nothing defines that macro in an NG build.
 
 Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()` there is the safe behaviour.
 
+### F2b: the id table is built in
+
+- The 1.7.104 id table is part of the library now. The build turns `data/mit-idtable-v1-1-7-104-0.bin` into a byte
+  array (`cmake/bin2c.cmake`, or xmake's `utils.bin2c` rule) and `src/REL/MitIdTable.cpp` compiles it in. Every
+  plugin built with the fork carries the table inside its DLL. Players install nothing for 1.7.104.
+- The fork no longer reads `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin`. There is no file and no override.
+- Every check stays: format, sizes, flags, checksum, revision, game version, module name, the PE stamp and image
+  size of the running game, sorted ids, RVAs inside the image. A mismatch still stops the game with a message.
+- `RequireMitTableRevision(n)` keeps its signature. It now checks the revision the plugin was built with. See
+  "Source-breaking changes and migration".
+- The table adds about 280 KB to each DLL.
+
 ## The 1.7.104 id table
 
-I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork reads
-`Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` instead.
+I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork uses its own id table, which is built
+into the library and so into every plugin made with it. Players install nothing for it.
 
 - **Format 1.0.** [docs/MIT-ID-TABLE-FORMAT.md](docs/MIT-ID-TABLE-FORMAT.md): a header, sorted `{id, rva}`
   records, and a checksum. The ids are the AE ids, the second id in `RELOCATION_ID(se, ae)`, so nothing changes
   in your code. Readers accept every 1.x: a later minor may add header or record fields, and a reader skips what it
-  does not know. A new major gets a new file name (the `v1` part), so old plugins keep their file.
+  does not know. A new major gets a new file name (the `v1` part). Each plugin carries the table it was built
+  with, so a new major never breaks an older plugin.
 - **Bound to one executable: the Steam 1.7.104.0 SkyrimSE.exe.** The header holds the version, the module name, and
   the PE timestamp and image size of the executable it was built from. The fork checks all of them against the
   running game. Any other 1.7.104 build is refused with a message, because the same version number can be a
   different build with different addresses.
-- **Private.** Each plugin reads the file into its own memory. Nothing is shared between plugins, and nothing goes
-  into the shared mapping the Address Library path uses.
+- **Built in and private.** The table is compiled into each plugin. At load the fork checks it and copies its
+  records into the plugin's own memory. Nothing is shared between plugins, and nothing goes into the shared mapping
+  the Address Library path uses.
 - **Coverage today (revision 3): every id this fork names.** 17,751 records: **16,502 mapped** (631 functions,
   125 globals, 410 NiRTTI objects, 8,016 vtables, 7,320 RTTI type descriptors) and **1,249 absent** ids that do not
   exist in 1.7.104 (1,247 retired or removed classes, 1 constructor the game inlined, 1 vtable no executable has).
@@ -284,10 +298,10 @@ I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork reads
   wrong (`data/selftest-1.7.104-fork-full.md`). Left out on purpose: 25 ids whose only meaning is the fork's own
   label (they are not in the 1.6.1170 Address Library either) and 11 raw RVAs that are not ids.
 - **A missing id stops the game, loudly.** If your plugin asks for an id the table does not have, the game stops
-  with a message naming the id, the file, its revision, and the revision your plugin declared it needs. If the id is
+  with a message naming the id, the table's revision, and the revision your plugin declared it needs. If the id is
   an absent record, the message says the id does not exist in 1.7.104 (removed or inlined by the game). Either way
-  it tells the user to report it to the plugin's author. It never returns a wrong address. A missing or damaged file, or a
-  file for another executable, stops the game with a message naming the file.
+  it tells the user to report it to the plugin's author. It never returns a wrong address. A damaged table, or a game executable
+  other than the one the table was built from, stops the game with a message.
 - **Regenerate or extend it** with [tools/mit-idtable](tools/mit-idtable/README.md): map the id on the 1.7.104
   executable, add a row with its RVA to a CSV, and build the file again. The tool refuses a row it cannot use,
   an RVA outside the executable, and an id that two CSVs map differently. `check` proves a file matches its
@@ -295,18 +309,18 @@ I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork reads
   `idmap-1.7.104-sync.csv` and `idmap-1.7.104-fixes.csv`), with the evidence for every row, so anyone can rebuild and audit it. The exact build
   command is in the tool's README.
 
-### Distribution rules (one shared file)
+### Distribution rules (the table ships inside every DLL)
 
-Every plugin on 1.7.104 reads the same file, and the copy a mod manager installed last wins. So:
-
-1. **One canonical table**, published as its own standalone download. Plugins list it as a requirement. A plugin
-   never bundles its own copy: an older bundled copy would overwrite a newer one and take ids away from every other
-   plugin.
-2. **Every published table is a strict superset of the one before it**, with a higher revision. No id is removed,
-   no RVA changes. `mit_idtable.py build --previous <last published file>` refuses anything else.
-3. **Your plugin declares the lowest revision it needs**, right after `SKSE::Init`:
-   `REL::IDDatabase::RequireMitTableRevision(1);`. On 1.7.104 an older table then stops the game at load with a
-   message naming both revisions. On other builds the call only records the value.
+1. **The table ships inside every DLL built with the fork.** There is no separate download and nothing to list as
+   a requirement. Each plugin carries the table it was built with, so two plugins never fight over one file.
+2. **A newer fork release carries a superset table**, with a higher revision. No id is removed, no RVA changes.
+   `mit_idtable.py build --previous <last published file>` refuses anything else.
+3. **Rebuild to pick it up.** A plugin keeps the table it was built with until its author rebuilds it against a
+   newer fork release. Players cannot update it on their own.
+4. **Your plugin declares the lowest revision it needs**, right after `SKSE::Init`:
+   `REL::IDDatabase::RequireMitTableRevision(3);`. On 1.7.104 it checks the table built into your DLL. If you built
+   against a fork whose table is older, the game stops at load with a message naming both revisions, so the mistake
+   shows on the first launch. On other builds the call only records the value.
 
 The table in `data/` is revision 3.
 - On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
@@ -363,6 +377,13 @@ offset on some verified build, and a compile error is better than a wrong read.
 | `ControlMap::ToggleControls(flags, enable)` | gains `storeState` (default `true`) | it calls the game's own function now |
 | `SkyrimVM` members (`impl`, `handlePolicy`, `objectBindPolicy`, ...) | `GetRuntimeData().<member>` | they move by 0x10 on 1.7.104 |
 | `BSInputEventQueue::buttonEvents`, `charEvents`, `mouseEvents`, `thumbstickEvents`, `connectEvents`, `kinectEvents`, `queueHead`, `queueTail` | `GetButtonEvents()`, `GetCharEvents()`, `GetMouseEvents()`, `GetThumbstickEvents()`, `GetConnectEvents()`, `GetKinectEvents()`, `GetQueueHead()`, `GetQueueTail()` | they move on 1.7.104 |
+
+Not a compile error, but a change in behaviour:
+
+- The 1.7.104 id table is built into the library (F2b). Plugins built on an earlier fork read
+  `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin`. Rebuild them and drop that file from any requirement list. A
+  rebuilt plugin never reads it. `RequireMitTableRevision(n)` compiles as before. It now compares `n` with the
+  revision built into the DLL, so it fails only when the plugin was built against a fork older than it needs.
 
 Not a compile error, but wrong on 1.7.104 if used directly:
 
@@ -587,6 +608,7 @@ For more information on how to use CommonLibSSE NG, you can look at the
   * Desktop development with C++
 
 ## End User Dependencies
+(This fork: Skyrim 1.7.104.0 needs no Address Library. Its id table is built into the plugin.)
 * [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444) or
   [VR Address Library for SKSEVR](https://www.nexusmods.com/skyrimspecialedition/mods/58101)
 * [SKSE64](https://skse.silverlock.org/)

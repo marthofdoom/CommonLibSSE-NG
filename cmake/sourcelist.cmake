@@ -2017,6 +2017,8 @@ set(SOURCES
 	src/RE/V/VirtualMachine.cpp
 	src/RE/Z/ZeroFunctionArguments.cpp
 	src/REL/ID.cpp
+	src/REL/MitIdTable.cpp
+	src/REL/MitIdTable.h
 	src/REL/Module.cpp
 	src/REL/Relocation.cpp
 	src/REL/Version.cpp

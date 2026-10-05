@@ -45,12 +45,41 @@ if(USE_IPO)
 	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION "$<$<CONFIG:RELEASE>:ON>")
 endif()
 
+# mit-3.7: the 1.7.104 id table is built into the library. data/mit-idtable-v1-1-7-104-0.bin becomes a
+# byte list at build time, and src/REL/MitIdTable.cpp compiles it in. Plugins carry the table inside
+# their DLL, so players install nothing for it. The header is regenerated when the .bin changes.
+set(MIT_IDTABLE_BIN "${CMAKE_CURRENT_SOURCE_DIR}/data/mit-idtable-v1-1-7-104-0.bin")
+set(MIT_IDTABLE_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(MIT_IDTABLE_HEADER "${MIT_IDTABLE_GENERATED_DIR}/mit-idtable-v1-1-7-104-0.bin.h")
+add_custom_command(
+	OUTPUT "${MIT_IDTABLE_HEADER}"
+	COMMAND "${CMAKE_COMMAND}" -E make_directory "${MIT_IDTABLE_GENERATED_DIR}"
+	COMMAND "${CMAKE_COMMAND}" "-DIN=${MIT_IDTABLE_BIN}" "-DOUT=${MIT_IDTABLE_HEADER}"
+		-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/bin2c.cmake"
+	DEPENDS "${MIT_IDTABLE_BIN}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/bin2c.cmake"
+	COMMENT "Embedding the MIT id table for Skyrim 1.7.104.0"
+	VERBATIM
+)
+set_source_files_properties(
+	src/REL/MitIdTable.cpp
+	PROPERTIES
+		OBJECT_DEPENDS "${MIT_IDTABLE_HEADER}"
+		SKIP_PRECOMPILE_HEADERS ON
+)
+
 add_library(
 	"${PROJECT_NAME}"
 	STATIC
 	${SOURCES}
+	"${MIT_IDTABLE_HEADER}"
 	.clang-format
 	CommonLibSSE.natvis
+)
+
+target_include_directories(
+	"${PROJECT_NAME}"
+	PRIVATE
+		"${MIT_IDTABLE_GENERATED_DIR}"
 )
 
 add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")

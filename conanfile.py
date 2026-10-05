@@ -33,6 +33,7 @@ class CommonLibSSE(ConanFile):
         "spdlog:header_only": True
     }
     exports_sources = "CMakeLists.txt", "CMakePresets.json", "cmake/**", "include/**", "src/**", "tests/**", \
+                      "data/mit-idtable-v1-1-7-104-0.bin", \
                       ".clang-format", "CommonLibSSE.natvis"
 
     def requirements(self):

@@ -27,11 +27,13 @@ python3 tools/mit-idtable/mit_idtable.py build \
     --where crosscheck=pass,na \
     --absent-where final_state=REMOVED,INLINED,ABSENT \
     --revision 3 --previous <revision 2 file> \
-    --out Data/SKSE/Plugins/
+    --out data/
 ```
 
-This writes `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revision 3). It is exactly the table in
-`data/`. Revisions 1 and 2 were built from fewer rows (see the README changelog).
+This writes `data/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revision 3), exactly the table in the fork. The fork
+builds that file into the library, so a new table reaches players when plugins are rebuilt against the fork release
+that carries it. Nobody installs the file itself. Revisions 1 and 2 were built from fewer rows (see the README
+changelog).
 
 - `--where COL=A,B` keeps a row only when COL is one of the listed values. Give it several times and every one
   must hold. Rows that pass the filters must have a numeric id and an RVA, or the build stops and names the row.

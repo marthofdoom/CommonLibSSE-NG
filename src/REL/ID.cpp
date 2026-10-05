@@ -1,5 +1,7 @@
 #include "REL/ID.h"
 
+#include "MitIdTable.h"
+
 #include "REX/W32/KERNEL32.h"
 
 #ifdef ENABLE_SKYRIM_VR
@@ -194,35 +196,20 @@ namespace REL
                                 a_version.string(".")));
             }
 
-            const auto path = mit_table_path(a_version);
             const auto fail = [&](std::string_view a_why) {
                 stl::report_and_fail(
                         std::format(
-                                "The id table {} cannot be used: {}.\n"
-                                "On Skyrim {} this plugin reads its addresses from that file, not from the Address "
-                                "Library. Install or update the MIT id table for Skyrim {} (one standalone download "
-                                "that every plugin using it shares). If it is installed and current, report this to "
-                                "the plugin's author."sv,
-                                path, a_why, a_version.string("."), a_version.string(".")));
+                                "The id table built into this plugin cannot be used: {}.\n"
+                                "On Skyrim {} this plugin reads its addresses from that table, not from the Address "
+                                "Library. No address was guessed. Please report this to the plugin's author, with "
+                                "this message."sv,
+                                a_why, a_version.string(".")));
             };
 
-            std::vector<std::uint8_t> data;
-            {
-                std::ifstream in(path, std::ios::in | std::ios::binary);
-                if (!in.is_open()) {
-                    fail("the file is missing or cannot be opened"sv);
-                }
-                in.seekg(0, std::ios::end);
-                const auto size = static_cast<std::streamoff>(in.tellg());
-                if (size < 0 || size > static_cast<std::streamoff>(256u * 1024u * 1024u)) {
-                    fail("its size cannot be read, or is over 256 MB"sv);
-                }
-                data.resize(static_cast<std::size_t>(size));
-                in.seekg(0, std::ios::beg);
-                if (!data.empty() && !in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()))) {
-                    fail("reading it failed"sv);
-                }
-            }
+            // mit-3.7: the table is built into this DLL (src/REL/MitIdTable.cpp), so there is no file to
+            // open. Every rule below still runs on these bytes, exactly as it ran on the file. The
+            // bytes are read through memcpy, so the array needs no alignment.
+            const std::span<const std::uint8_t> data(detail::mit_idtable_1_7_104, detail::mit_idtable_1_7_104_size);
 
             constexpr std::size_t minHeaderSize = 64;
             constexpr std::size_t minRecordSize = 16;
@@ -264,7 +251,7 @@ namespace REL
                     hash *= 0x100000001B3ull;
                 }
                 if (hash != u64at(data.size() - trailerSize)) {
-                    fail("its checksum does not match (the file is damaged)"sv);
+                    fail("its checksum does not match (the table is damaged)"sv);
                 }
             }
             const auto revision = u32at(44);
@@ -302,7 +289,7 @@ namespace REL
             }
             if (timeDateStamp != u32at(24) || sizeOfImage != u32at(28)) {
                 fail(std::format(
-                        "it was built from a different {} executable (file: TimeDateStamp {:08X}, SizeOfImage {:X}; "
+                        "it was built from a different {} executable (table: TimeDateStamp {:08X}, SizeOfImage {:X}; "
                         "game: {:08X}, {:X}). It is for the Steam build, and the same version number can be another "
                         "build"sv,
                         a_version.string("."), u32at(24), u32at(28), timeDateStamp, sizeOfImage));
@@ -338,9 +325,10 @@ namespace REL
             const auto version = Module::get().version();
             stl::report_and_fail(
                     std::format(
-                            "The id table {} is revision {}, and this plugin needs revision {} or newer.\n"
-                            "Update the MIT id table for Skyrim {} (one standalone download that every plugin using "
-                            "it shares). A plugin must not ship its own copy of the table."sv,
-                            mit_table_path(version), _mitTableRevision, a_required, version.string(".")));
+                            "The id table built into this plugin is revision {}, and the plugin needs revision {} or newer.\n"
+                            "The plugin was built against an older CommonLibSSE-NG (mit-3.7) than it needs on Skyrim {}. "
+                            "Nothing a player installs can fix this. Please report it to the plugin's author: the plugin "
+                            "must be rebuilt against a release whose table is revision {} or newer."sv,
+                            _mitTableRevision, a_required, version.string("."), a_required));
         }
 }

@@ -207,15 +207,16 @@ namespace REL
                     const auto required = _mitRequiredRevision.load(std::memory_order_relaxed);
                     stl::report_and_fail(
                             std::format(
-                                    "Address Library id {} is not in the id table {} (revision {}, game version {}).\n"
+                                    "Address Library id {} is not in the id table built into this plugin (revision {}, "
+                                    "game version {}).\n"
                                     "{}\n"
-                                    "This game version gets its ids from that file, not from the Address Library. "
+                                    "This game version gets its ids from that table, not from the Address Library. "
                                     "The table does not cover every id yet. No address was guessed.\n"
                                     "Please report this to the plugin's author, with this message. Plugin authors: map "
                                     "the id on this exact executable, add it to the table (tools/mit-idtable in "
-                                    "github.com/marthofdoom/CommonLibSSE-NG), publish a new revision, and require it "
-                                    "with REL::IDDatabase::RequireMitTableRevision."sv,
-                                    a_id, mit_table_path(Module::get().version()), _mitTableRevision,
+                                    "github.com/marthofdoom/CommonLibSSE-NG), publish a new revision, rebuild the "
+                                    "plugin against it, and require it with REL::IDDatabase::RequireMitTableRevision."sv,
+                                    a_id, _mitTableRevision,
                                     Module::get().version().string("."),
                                     required != 0 ?
                                         std::format("This plugin declared that it needs revision {} or newer."sv, required) :
@@ -234,12 +235,11 @@ namespace REL
                 // AE id column. There is no address to return.
                 stl::report_and_fail(
                         std::format(
-                                "Address Library id {} does not exist in Skyrim {}: the id table {} (revision {}) "
-                                "lists it as removed (the game no longer has this function or object, or inlined "
-                                "it).\nNo address was guessed. Please report this to the plugin's author: the "
-                                "plugin needs a different way to do this on this game version."sv,
-                                a_id, Module::get().version().string("."), mit_table_path(Module::get().version()),
-                                _mitTableRevision));
+                                "Address Library id {} does not exist in Skyrim {}: the id table built into this "
+                                "plugin (revision {}) lists it as removed (the game no longer has this function or "
+                                "object, or inlined it).\nNo address was guessed. Please report this to the plugin's "
+                                "author: the plugin needs a different way to do this on this game version."sv,
+                                a_id, Module::get().version().string("."), _mitTableRevision));
             }
 
             return static_cast<std::size_t>(it->offset);
@@ -276,6 +276,11 @@ namespace REL
          * is the id source (1.7.104.0) and its revision is lower, the game stops with a message
          * naming both revisions. Everywhere else it only records the value. The highest value
          * asked for wins, and it is also named in the message for an id the table lacks.
+         *
+         * The table is built into this DLL, so the revision checked is the one the plugin was
+         * BUILT with. A failure means the plugin was built against an older fork than it declares
+         * it needs (an author's build error, found on 1.7.104 at load). Nothing a player installs
+         * changes the result. Before the table was built in, it checked a file players installed.
          */
         static void RequireMitTableRevision(std::uint32_t a_revision) {
             auto& db = get();
@@ -289,8 +294,8 @@ namespace REL
         }
 
         /**
-         * mit-3.7: the revision of the MIT id table in use, or 0 when the ids come from the
-         * Address Library (every build but 1.7.104.0).
+         * mit-3.7: the revision of the MIT id table in use (the one built into this DLL), or 0
+         * when the ids come from the Address Library (every build but 1.7.104.0).
          */
         [[nodiscard]] std::uint32_t MitTableRevision() const noexcept { return _mitTableRevision; }
 
@@ -396,8 +401,8 @@ namespace REL
         void load()
         {
             const auto version = Module::get().version();
-            // mit-3.7: 1.7.x never reads the Nexus Address Library. 1.7.104.0 reads our own id
-            // table into a private buffer (load_mit_table). Any other 1.7.x is refused here, before
+            // mit-3.7: 1.7.x never reads the Nexus Address Library. 1.7.104.0 copies our own id
+            // table, built into this DLL, into a private buffer (load_mit_table). Any other 1.7.x is refused here, before
             // a single id or layout is used, because nothing in this library is verified for it.
             if (version[0] == 1 && version[1] == 7) {
                 load_mit_table(version);
@@ -427,29 +432,26 @@ namespace REL
         /**
          * mit-3.7: loads the MIT id table (docs/MIT-ID-TABLE-FORMAT.md, format 1.x) for 1.7.104.0.
          *
-         * The file is read whole into memory, checked against every rule in the format note, and
-         * its records are copied into _mitTable, a buffer this DLL owns. It is never placed in the
-         * shared, writable CommonLibSSEOffsets-v2 mapping that load_file uses, so no other plugin
-         * can change what this one reads, and this one changes nothing for anyone else.
+         * The table is built into this DLL: data/mit-idtable-v1-1-7-104-0.bin is compiled into
+         * the library (src/REL/MitIdTable.cpp), so there is no file to install or read. Its bytes
+         * are checked against every rule in the format note, and its records are copied into
+         * _mitTable, a buffer this DLL owns. It is never placed in the shared, writable
+         * CommonLibSSEOffsets-v2 mapping that load_file uses, so no other plugin can change what
+         * this one reads, and this one changes nothing for anyone else.
+         *
+         * Why a copy and not a view of the built-in bytes: the records are read as mapping_t
+         * through memcpy (a byte array is not an array of mapping_t objects), a later format minor
+         * may grow the record past 16 bytes, and _id2offset is the same mutable span load_file
+         * sorts in place. The copy is made once, at load.
          *
          * Growth: any format 1 minor is read. A header or record larger than this reader knows
-         * is read for the fields it knows and the rest is skipped. A different format major is
-         * a different file name (mit-idtable-v<major>-...), so it never reaches this reader.
+         * is read for the fields it knows and the rest is skipped.
          *
-         * The header binds the file to one exact executable: version, module name, and the PE
+         * The header binds the table to one exact executable: version, module name, and the PE
          * TimeDateStamp and SizeOfImage read from the running image's own headers. Every failure
-         * stops the game with a message naming the file. Nothing falls back to another source.
+         * stops the game with a message. Nothing falls back to another source.
          */
         void load_mit_table(Version a_version);  // mit-3.7: defined in src/REL/ID.cpp
-
-        /**
-         * mit-3.7: the path of the MIT id table for a game version. The format MAJOR is part
-         * of the name: a later incompatible major ships as a second file beside this one, so
-         * plugins built for major 1 keep loading their file. Minor versions keep the name.
-         */
-        [[nodiscard]] static std::string mit_table_path(Version a_version) {
-            return std::format("Data/SKSE/Plugins/mit-idtable-v1-{}.bin"sv, a_version.string());
-        }
 
         [[noreturn]] void fail_old_revision(std::uint32_t a_required) const;  // mit-3.7: src/REL/ID.cpp
 
@@ -557,7 +559,7 @@ namespace REL
         static inline std::mutex       _initLock;
         detail::memory_map             _mmap;
         std::span<mapping_t>           _id2offset;
-        // mit-3.7: the 1.7.104 id table, private to this DLL (load_mit_table). Constant-initialized
+        // mit-3.7: the 1.7.104 id table, copied from the built-in bytes (load_mit_table). Constant-initialized
         // members (no dynamic initializer for _instance), so a lookup during another TU's static
         // initialization cannot be undone by a late constructor.
         std::unique_ptr<mapping_t[]>   _mitTable;

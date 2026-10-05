@@ -1,27 +1,32 @@
 # MIT id table, format 1.0
 
-This is the file the MIT CommonLibSSE-NG 3.7.0 line (github.com/marthofdoom/CommonLibSSE-NG, branch `main`) reads
+This is the table the MIT CommonLibSSE-NG 3.7.0 line (github.com/marthofdoom/CommonLibSSE-NG, branch `main`) uses
 on Skyrim SE **1.7.104.0** in place of the Nexus Address Library. It maps Address Library ids (the AE id column,
 the same ids `RELOCATION_ID(se, ae)` and `REL::VariantID` already name) to RVAs in one exact game executable.
 
 The format is ours. It was written from scratch for this fork. It is not the Address Library's format and it
 does not read or reuse any Address Library file.
 
-## Where the file lives
+## Where the table lives
+
+The table is built into the library. The fork's source keeps it as a file in this format:
 
 ```
-Data/SKSE/Plugins/mit-idtable-v<formatMajor>-<major>-<minor>-<patch>-<build>.bin
+data/mit-idtable-v<formatMajor>-<major>-<minor>-<patch>-<build>.bin
 ```
 
-For format 1 and 1.7.104.0 that is `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin`. The game version in the name
-is the executable's ProductVersion, the same string the Address Library file names use.
+For format 1 and 1.7.104.0 that is `data/mit-idtable-v1-1-7-104-0.bin`. The game version in the name is the
+executable's ProductVersion, the same string the Address Library file names use. The build turns the file into a
+byte array (`cmake/bin2c.cmake`, or xmake's `utils.bin2c` rule) and `src/REL/MitIdTable.cpp` compiles it in. So
+every plugin built with the fork carries the table inside its DLL, and players install nothing for it. The fork
+reads no table file at runtime and has no switch to read one.
 
 **Why the format major is in the name.** A later major is, by definition, a layout a major-1 reader cannot read.
-With the major in the name, a major-2 table installs beside the major-1 table, and plugins built against a
-major-1 reader keep finding their own file. Without it, installing the new table would stop every older plugin.
-Minor versions only add things a major-1 reader can skip, so they keep the name.
+The name keeps the two apart in the fork's source and in the tool. A plugin carries the table its own reader was
+built for, so a new major never breaks an older plugin. Minor versions only add things a major-1 reader can skip,
+so they keep the name.
 
-The fork only reads this file on exactly 1.7.104.0. Every other build keeps its usual source (the Nexus Address
+The fork only uses this table on exactly 1.7.104.0. Every other build keeps its usual source (the Nexus Address
 Library on 1.5.97 and 1.6.x, the VR CSV on VR). Any other 1.7.x build is refused at load with a message, because
 nothing in the fork is verified for it.
 
@@ -84,11 +89,12 @@ The file size is exactly `headerSize + recordSize * n + 8`. Anything else is ref
 
 ## What a reader checks, in order
 
-Every failure is fatal and names the file. Nothing falls back to another source. This is the order the fork's
+Every failure is fatal and says which rule failed. Nothing falls back to another source. This is the order the fork's
 `IDDatabase::load_mit_table` uses.
 
-1. The game version is exactly 1.7.104.0 (any other 1.7.x is refused before a file is opened).
-2. The file exists and can be read (at most 256 MB).
+1. The game version is exactly 1.7.104.0 (any other 1.7.x is refused before the table is read).
+2. The bytes are the table built into the plugin. The fork opens no file. (A standalone reader such as
+   `mit_idtable.py check` reads a file here.)
 3. Size is at least 72 bytes.
 4. magic is `MITIDTAB`.
 5. formatMajor is 1.
@@ -105,13 +111,14 @@ Every failure is fatal and names the file. Nothing falls back to another source.
     record).
 15. If the plugin already declared a minimum revision (see below), tableRevision is at least that.
 
-The fork loads the records into a buffer owned by the plugin (one copy per DLL). It never puts them in the shared,
+The fork runs every rule above on the built-in bytes at load, then copies the records into a buffer owned by the
+plugin (one copy per DLL). It never puts them in the shared,
 writable `CommonLibSSEOffsets-v2-<version>` file mapping that the Address Library path uses, so one plugin's table
 can never change what another plugin reads.
 
 ## Lookups
 
-A lookup of an id that is not in the file stops the game with a message that names the id, the file, its revision,
+A lookup of an id that is not in the table stops the game with a message that names the id, the table's revision,
 the game version, and the revision the plugin declared it needs (or that it declared none). It says the table does
 not cover every id yet and asks the user to report it to the plugin's author.
 
@@ -124,25 +131,25 @@ self-checks: it returns nothing for both.
 
 ## Revisions and distribution
 
-Every plugin on 1.7.104 reads the SAME file, `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin`. Whichever copy a mod
-manager installed last is the one every plugin gets. So:
+Every plugin carries its own copy of the table, the one built into the fork release it was built against. So:
 
-1. **There is one canonical table**, published as its own standalone download. Plugins DEPEND on it (a mod
-   requirement). A plugin never bundles its own copy, because an older bundled copy would overwrite a newer one and
-   take ids away from every other plugin.
-2. **Each published table is a strict superset of the previous one.** No id is removed, no mapped id's RVA
-   changes, no mapped id becomes absent, and tableRevision goes up. An absent id may become mapped, as a
-   correction. `mit_idtable.py build --previous <last published file>` enforces all of it. The one exception is
-   an RVA proven wrong: `--correct ID --correct-evidence CSV` changes it, with one evidence row per id, and the
-   build prints it. A wrong RVA runs the wrong code, so fixing it beats keeping the superset.
+1. **The table ships inside every DLL built with the fork.** There is no separate download and no file to install.
+   Two plugins never share or overwrite one table.
+2. **Each published table is a strict superset of the previous one**, and a newer fork release carries it. No id is
+   removed, no mapped id's RVA changes, no mapped id becomes absent, and tableRevision goes up. An absent id may
+   become mapped, as a correction. `mit_idtable.py build --previous <last published file>` enforces all of it. The
+   one exception is an RVA proven wrong: `--correct ID --correct-evidence CSV` changes it, with one evidence row per
+   id, and the build prints it. A wrong RVA runs the wrong code, so fixing it beats keeping the superset. A plugin
+   picks up a new table only when its author rebuilds it against the newer fork release.
 3. **A plugin declares the lowest revision it needs**, right after `SKSE::Init`:
 
    ```cpp
    REL::IDDatabase::RequireMitTableRevision(1);
    ```
 
-   On 1.7.104 an older table then stops the game at load with a message naming both revisions, instead of failing
-   later on one id. On every other build the call only records the value. `REL::IDDatabase::get().MitTableRevision()`
+   On 1.7.104 it checks the table built into the DLL. If the plugin was built against a fork whose table is older,
+   the game stops at load with a message naming both revisions, instead of failing later on one id. That is the
+   author's build error, and the first launch shows it. On every other build the call only records the value. `REL::IDDatabase::get().MitTableRevision()`
    returns the revision in use (0 when the ids come from the Address Library).
 
 ## Building a file

@@ -81,6 +81,11 @@ target("commonlibsse-ng")
     -- add source files
     add_files("src/**.cpp")
 
+    -- mit-3.7: build the 1.7.104 id table into the library (src/REL/MitIdTable.cpp includes
+    -- the generated "mit-idtable-v1-1-7-104-0.bin.h"). nozeroend keeps the bytes exact.
+    add_rules("utils.bin2c", { nozeroend = true })
+    add_files("data/mit-idtable-v1-1-7-104-0.bin")
+
     -- add header files
     add_includedirs("include", { public = true })
     add_headerfiles(
