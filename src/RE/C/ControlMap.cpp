@@ -20,7 +20,7 @@ namespace RE
 
 		std::string UnverifiedMessage(std::string_view a_what)
 		{
-			return fmt::format(
+			return std::format(
 				"ControlMap::{}: the ControlMap layout is not verified for game version {} "
 				"(verified: 1.6.1170.0, 1.5.97.0)."sv,
 				a_what, REL::Module::get().version().string("."sv));
@@ -57,10 +57,10 @@ namespace RE
 		if (IsAE1170()) {
 			count = 18;
 			// 16 is "Creations Menu" on 1.6.1170; the 1.5.97-numbered kFavor is 17.
-			index = a_context == InputContextID::kFavor ? 17 : stl::to_underlying(a_context);
+			index = a_context == InputContextID::kFavor ? 17 : std::to_underlying(a_context);
 		} else if (IsSE197()) {
 			count = 17;
-			index = stl::to_underlying(a_context);
+			index = std::to_underlying(a_context);
 		} else {
 			static std::atomic_flag reported = ATOMIC_FLAG_INIT;
 			if (!reported.test_and_set()) {
@@ -131,6 +131,53 @@ namespace RE
 		}
 
 		return ""sv;
+	}
+
+	namespace
+	{
+		// mit-3.7 (upstream sync 2024-09): Push/PopInputContext take the RUNTIME's own
+		// context index. Verified: 1.5.97 Push id 67243 at 0xC11AE0 rejects edx >= 0x11,
+		// 1.6.1170 Push id 68543 at 0xCD5450 rejects edx >= 0x12; both push onto
+		// contextPriorityStack (+0x100 / +0x108). Pop ids 67244 / 68544 (0xC11BC0 /
+		// 0xCD5530) walk the same stack. The enum is numbered as on 1.5.97, so kFavor is
+		// translated to 17 on 1.6.1170 exactly as GetInputContext does. Unverified builds
+		// are refused (one critical log line, no call).
+		std::optional<std::uint32_t> RuntimeContextId(InputContextID a_context, std::string_view a_what)
+		{
+			if (IsAE1170()) {
+				return a_context == InputContextID::kFavor ? 17u : static_cast<std::uint32_t>(std::to_underlying(a_context));
+			}
+			if (IsSE197()) {
+				return static_cast<std::uint32_t>(std::to_underlying(a_context));
+			}
+			static std::atomic_flag reported = ATOMIC_FLAG_INIT;
+			if (!reported.test_and_set()) {
+				SKSE::log::critical("{} Every Push/PopInputContext call is REFUSED.", UnverifiedMessage(a_what));
+			}
+			return std::nullopt;
+		}
+	}
+
+	void ControlMap::PopInputContext(InputContextID a_context)
+	{
+		const auto id = RuntimeContextId(a_context, "PopInputContext"sv);
+		if (!id) {
+			return;
+		}
+		using func_t = void(ControlMap*, std::uint32_t);
+		REL::Relocation<func_t> func{ RELOCATION_ID(67244, 68544) };
+		return func(this, *id);
+	}
+
+	void ControlMap::PushInputContext(InputContextID a_context)
+	{
+		const auto id = RuntimeContextId(a_context, "PushInputContext"sv);
+		if (!id) {
+			return;
+		}
+		using func_t = void(ControlMap*, std::uint32_t);
+		REL::Relocation<func_t> func{ RELOCATION_ID(67243, 68543) };
+		return func(this, *id);
 	}
 
 	void ControlMap::ToggleControls(UEFlag a_flags, bool a_enable, bool a_storeState)

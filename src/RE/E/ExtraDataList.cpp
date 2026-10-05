@@ -33,7 +33,7 @@ namespace RE
 			return 0x18;
 		}
 		stl::report_and_fail(
-			fmt::format(
+			std::format(
 				"ExtraDataList::GetRuntimeSize: the ExtraDataList size is not verified for game version {} "
 				"(verified: 1.6.1170.0, 1.5.97.0)."sv,
 				REL::Module::get().version().string(".")));
@@ -292,8 +292,15 @@ namespace RE
 		auto xTeleport = GetByType<ExtraTeleport>();
 
 		return xTeleport && xTeleport->teleportData ?
-                   xTeleport->teleportData->linkedDoor :
-                   ObjectRefHandle();
+		           xTeleport->teleportData->linkedDoor :
+		           ObjectRefHandle();
+	}
+
+	bool ExtraDataList::HasQuestObjectAlias()
+	{
+		using func_t = decltype(&ExtraDataList::HasQuestObjectAlias);
+		REL::Relocation<func_t> func{ RELOCATION_ID(11913, 12052) };
+		return func(this);
 	}
 
 	void ExtraDataList::SetCount(std::uint16_t a_count)

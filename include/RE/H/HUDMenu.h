@@ -109,6 +109,13 @@ namespace RE
 			return REL::RelocateMember<RUNTIME_DATA>(this, 0x40, 0x70);
 		}
 
+		static void FlashMeter(ActorValue a_actorValue)
+		{
+			using func_t = decltype(&HUDMenu::FlashMeter);
+			REL::Relocation<func_t> func{ RELOCATION_ID(51907, 52845) };
+			return func(a_actorValue);
+		}
+
 		static void UpdateCrosshairMagicTarget(bool a_valid)
 		{
 			using func_t = decltype(&HUDMenu::UpdateCrosshairMagicTarget);

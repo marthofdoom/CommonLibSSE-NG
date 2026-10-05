@@ -13,7 +13,7 @@ namespace RE
 
 		inline std::size_t MapIndex(std::underlying_type_t<DefaultObjectID> a_idx) noexcept
 		{
-			if (a_idx <= stl::to_underlying(DefaultObjectID::kKeywordActivatorFurnitureNoPlayer)) {
+			if (a_idx <= std::to_underlying(DefaultObjectID::kKeywordActivatorFurnitureNoPlayer)) {
 				return a_idx;
 			}
 			std::size_t result;
@@ -72,7 +72,7 @@ namespace RE
 		// 1.6.1170 inserted HMCC (363) and HMAE (364) before MHFL, so the 1.5.97
 		// index 363 (kModsHelpFormList) is 365 there. 0..362 are the same on both.
 		// (Literal 363: in a cross-VR build DEFAULT_OBJECT stops at 182.)
-		constexpr std::size_t kSEModsHelpFormList = 0x0000FFFF & stl::to_underlying(DefaultObjectID::kModsHelpFormList);
+		constexpr std::size_t kSEModsHelpFormList = 0x0000FFFF & std::to_underlying(DefaultObjectID::kModsHelpFormList);
 		static_assert(kSEModsHelpFormList == 363);
 		if (a_seIndex == kSEModsHelpFormList && Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170)) {
 			return 365;
@@ -97,7 +97,7 @@ namespace RE
 
 	TESForm** BGSDefaultObjectManager::GetObject(DefaultObjectID a_object) noexcept
 	{
-		auto idx = MapIndex(stl::to_underlying(a_object));
+		auto idx = MapIndex(std::to_underlying(a_object));
 		if (idx == kInvalid) {
 			return nullptr;
 		}
@@ -110,23 +110,23 @@ namespace RE
 
 	bool BGSDefaultObjectManager::IsObjectInitialized(DefaultObjectID a_object) const noexcept
 	{
-		const auto idx = MapIndex(stl::to_underlying(a_object));
+		const auto idx = MapIndex(std::to_underlying(a_object));
 		return idx != kInvalid && IsObjectInitialized(GetRuntimeIndex(idx));
 	}
 
 	bool BGSDefaultObjectManager::SupportsVR(DefaultObjectID a_object) noexcept
 	{
-		auto idx = stl::to_underlying(a_object);
-		return idx <= stl::to_underlying(DefaultObjectID::kKeywordActivatorFurnitureNoPlayer) || idx & 0xFFFF0000;
+		auto idx = std::to_underlying(a_object);
+		return idx <= std::to_underlying(DefaultObjectID::kKeywordActivatorFurnitureNoPlayer) || idx & 0xFFFF0000;
 	}
 
 	bool BGSDefaultObjectManager::SupportsSE(DefaultObjectID a_object) noexcept
 	{
-		return (stl::to_underlying(a_object) & 0x0000FFFF) || a_object != DefaultObjectID::kWerewolfSpell;
+		return (std::to_underlying(a_object) & 0x0000FFFF) || a_object != DefaultObjectID::kWerewolfSpell;
 	}
 
 	bool BGSDefaultObjectManager::SupportsCurrentRuntime(DefaultObjectID a_object) noexcept
 	{
-		return MapIndex(stl::to_underlying(a_object)) != kInvalid;
+		return MapIndex(std::to_underlying(a_object)) != kInvalid;
 	}
 }

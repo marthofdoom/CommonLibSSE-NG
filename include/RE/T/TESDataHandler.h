@@ -40,6 +40,8 @@ namespace RE
 	public:
 		static TESDataHandler* GetSingleton();
 
+		bool AddFormToDataHandler(TESForm* a_form);
+
 		std::uint32_t LoadScripts();
 		TESForm*      LookupForm(FormID a_localFormID, std::string_view a_modName);
 		TESForm*      LookupFormRaw(FormID a_rawFormID, std::string_view a_modName);
@@ -136,11 +138,11 @@ namespace RE
 			}
 		}
 
-		[[nodiscard]] inline std::uint8_t GetLoadedLightModCount() const noexcept {
+		[[nodiscard]] inline std::uint16_t GetLoadedLightModCount() const noexcept {
 			if SKYRIM_REL_CONSTEXPR (REL::Module::IsVR()) {
 				return 0;
 			} else {
-				return static_cast<std::uint8_t>(REL::RelocateMember<const TESFileCollection>(this, 0xD70, 0).smallFiles.size());
+				return static_cast<std::uint16_t>(REL::RelocateMember<const TESFileCollection>(this, 0xD70, 0).smallFiles.size());
 			}
 		}
 
@@ -165,7 +167,7 @@ namespace RE
 		std::uint16_t                     pad002;                                         // 002
 		std::uint32_t                     pad004;                                         // 004
 		TESObjectList*                    objectList;                                     // 008
-		BSTArray<TESForm*>                formArrays[stl::to_underlying(FormType::Max)];  // 010
+		BSTArray<TESForm*>                formArrays[std::to_underlying(FormType::Max)];  // 010
 		TESRegionList*                    regionList;                                     // D00
 		NiTPrimitiveArray<TESObjectCELL*> interiorCells;                                  // D08
 		NiTPrimitiveArray<BGSAddonNode*>  addonNodes;                                     // D20
@@ -192,6 +194,7 @@ namespace RE
 		InventoryChanges*     merchantInventory;  // 1588
 #endif
 	};
+#undef RUNTIME_DATA_CONTENT
 
 	template <class T>
 	T* TESDataHandler::LookupForm(FormID a_localFormID, std::string_view a_modName)

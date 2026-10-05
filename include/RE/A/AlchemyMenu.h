@@ -7,10 +7,12 @@
 
 namespace RE::CraftingSubMenus
 {
-	class AlchemyMenu : public CraftingSubMenu
+	namespace CraftingSubMenus
 	{
-	public:
-		inline static constexpr auto RTTI = RTTI_CraftingSubMenus__AlchemyMenu;
+		class AlchemyMenu : public CraftingSubMenu
+		{
+		public:
+			inline static constexpr auto RTTI = RTTI_CraftingSubMenus__AlchemyMenu;
 
 		class QuitMenuCallback : public IMessageBoxCallback
 		{
@@ -64,25 +66,22 @@ namespace RE::CraftingSubMenus
 			void Accept(CallbackProcessor* a_cbReg) override;          // 01
 			bool ProcessUserEvent(BSFixedString* a_control) override;  // 05
 
-		// members
-		RE::BSTArray<MenuIngredientEntry> ingredientsEntries;       // 100
-		std::int32_t                      unk118;                   // 118
-		std::int32_t                      unk11c;                   // 11c
-		std::uint32_t                     ingredientIndex1;         // 120
-		std::uint32_t                     ingredientIndex2;         // 124
-		std::uint32_t                     ingredientIndex3;         // 128
-		std::uint32_t                     unk12c;                   // 12c
-		std::uint32_t                     selectedIngredientCount;  // 130
-		std::uint32_t                     unk134;                   // 134
-		PotionCreationData                potionCreationData;       // 138
-		RE::GFxValue                      unk158;                   // 158
-		std::uint64_t                     unk170;                   // 170
-		RE::TESForm*                      outputPotion;             // 178
-		RE::TESForm*                      outputPotion2;            // 180
-		std::uint32_t                     unk188;                   // 188
-		std::uint32_t                     unk18c;                   // 18c
-		RE::BSFixedString                 newRecipeFormatString;    // 190
-		std::uint64_t                     playerHasPurityPerk;      // 198
-	};
-	static_assert(sizeof(AlchemyMenu) == 0x1A0);
+			// members
+			BSTArray<MenuIngredientEntry>   ingredientEntries;      // 100
+			BSTSmallArray<std::uint32_t, 4> selectedIndexes;        // 118
+			PotionCreationData              potionCreationData;     // 138
+			GFxValue                        categories;             // 158
+			InventoryEntryData*             resultPotionEntry;      // 170
+			AlchemyItem*                    unknownPotion;          // 178 - displayed when player does not know effects
+			AlchemyItem*                    resultPotion;           // 180
+			std::uint32_t                   currentIngredientIdx;   // 188
+			std::uint32_t                   pad18C;                 // 18C
+			BSFixedString                   newRecipeFormatString;  // 190
+			bool                            playerHasPurityPerk;    // 198
+			std::uint8_t                    pad199;                 // 199
+			std::uint16_t                   pad19A;                 // 19A
+			std::uint32_t                   pad19C;                 // 19C
+		};
+		static_assert(sizeof(AlchemyMenu) == 0x1A0);
+	}
 }

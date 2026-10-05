@@ -12,13 +12,13 @@
 #include "RE/S/SoundLevels.h"
 #include "RE/T/TESActorBase.h"
 #include "RE/T/TESRaceForm.h"
+#include "RE/T/TintMask.h"
 
 namespace RE
 {
 	class BSFaceGenNiNode;
 	class MenuOpenCloseEvent;
 	class NiColorA;
-	class TintMask;
 
 	class CreatureSounds
 	{

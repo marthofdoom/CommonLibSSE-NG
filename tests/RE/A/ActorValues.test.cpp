@@ -21,6 +21,7 @@ TEST_CASE("ActorValue/std::to_string", "[.][e2e]")
 	REL::Module::reset();
 }
 
+#ifdef FMT_VERSION
 TEST_CASE("ActorValue/fmt::format", "[.][e2e]")
 {
 	REQUIRE(REL::Module::inject());
@@ -39,6 +40,7 @@ TEST_CASE("ActorValue/fmt::format", "[.][e2e]")
 	}
 	REL::Module::reset();
 }
+#endif
 
 TEST_CASE("ActorValue/std::format", "[.][e2e]")
 {

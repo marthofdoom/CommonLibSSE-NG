@@ -43,6 +43,38 @@ namespace RE
 		return func(this);
 	}
 
+	bool TESForm::HasAnyKeywordByEditorID(const std::vector<std::string>& editorIDs) const
+	{
+		// Try to cast to a keyword form interface
+		const auto keywordForm = As<BGSKeywordForm>();
+		if (!keywordForm) {
+			return false;
+		}
+
+		// Iterate through the keywords
+		bool hasKeyword = false;
+
+		keywordForm->ForEachKeyword([&](const BGSKeyword* a_keyword) {
+			if (std::ranges::find(editorIDs, a_keyword->GetFormEditorID()) != editorIDs.end()) {
+				hasKeyword = true;
+				return BSContainer::ForEachResult::kStop;
+			}
+			return BSContainer::ForEachResult::kContinue;
+		});
+
+		return hasKeyword;
+	}
+
+	bool TESForm::HasKeywordByEditorID(std::string_view a_editorID)
+	{
+		const auto keywordForm = As<BGSKeywordForm>();
+		if (!keywordForm) {
+			return false;
+		}
+
+		return keywordForm->HasKeywordString(a_editorID);
+	}
+
 	bool TESForm::HasKeywordInArray(const std::vector<BGSKeyword*>& a_keywords, bool a_matchAll) const
 	{
 		const auto keywordForm = As<BGSKeywordForm>();
@@ -75,8 +107,8 @@ namespace RE
 
 		bool hasKeyword = false;
 
-		a_keywordList->ForEachForm([&](const TESForm& a_form) {
-			const auto keyword = a_form.As<BGSKeyword>();
+		a_keywordList->ForEachForm([&](const TESForm* a_form) {
+			const auto keyword = a_form->As<BGSKeyword>();
 			hasKeyword = keyword && keywordForm->HasKeyword(keyword);
 			if ((a_matchAll && !hasKeyword) || hasKeyword) {
 				return BSContainer::ForEachResult::kStop;
@@ -179,5 +211,12 @@ namespace RE
 		default:
 			return false;
 		}
+	}
+
+	void TESForm::SetPlayerKnows(bool a_known)
+	{
+		using func_t = decltype(&TESForm::SetPlayerKnows);
+		REL::Relocation<func_t> func{ RELOCATION_ID(14482, 14639) };
+		return func(this, a_known);
 	}
 }

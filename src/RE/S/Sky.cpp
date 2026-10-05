@@ -7,7 +7,7 @@ namespace RE
 	Sky* Sky::GetSingleton()
 	{
 		using func_t = decltype(&Sky::GetSingleton);
-		REL::Relocation<func_t> func{ Offset::Sky::GetSingleton };
+		REL::Relocation<func_t> func{ RELOCATION_ID(13789, 13878) };
 		return func();
 	}
 
@@ -26,21 +26,29 @@ namespace RE
 	void Sky::SetWeather(TESWeather* a_weather, bool a_override, bool a_accelerate)
 	{
 		using func_t = decltype(&Sky::SetWeather);
-		REL::Relocation<func_t> func{ Offset::Sky::SetWeather };
+		REL::Relocation<func_t> func{ RELOCATION_ID(25694, 26241) };
 		func(this, a_weather, a_override, a_accelerate);
 	}
 
 	void Sky::ForceWeather(TESWeather* a_weather, bool a_override)
 	{
 		using func_t = decltype(&Sky::ForceWeather);
-		REL::Relocation<func_t> func{ Offset::Sky::ForceWeather };
+		REL::Relocation<func_t> func{ RELOCATION_ID(25696, 26243) };
 		func(this, a_weather, a_override);
+	}
+
+	void Sky::ReleaseWeatherOverride()
+	{
+		if (overrideWeather) {
+			flags.set(Flags::kReleaseWeatherOverride);
+			overrideWeather = nullptr;
+		}
 	}
 
 	void Sky::ResetWeather()
 	{
 		using func_t = decltype(&Sky::ResetWeather);
-		REL::Relocation<func_t> func{ Offset::Sky::ResetWeather };
+		REL::Relocation<func_t> func{ RELOCATION_ID(25695, 26242) };
 		func(this);
 	}
 }

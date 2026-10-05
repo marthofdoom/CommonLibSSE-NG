@@ -30,6 +30,13 @@ namespace RE
 			REL::RelocateMember<GFxValue>(this, 0x30, 0x40) = a_root;
 		}
 
+		static void OpenTutorialMenu(DEFAULT_OBJECT a_tutorial)
+		{
+			using func_t = decltype(&TutorialMenu::OpenTutorialMenu);
+			REL::Relocation<func_t> func{ RELOCATION_ID(51818, 52692) };
+			return func(a_tutorial);
+		}
+
 		// members
 #ifndef SKYRIM_CROSS_VR
 		GFxValue root;  // 30, 40 - "Menu_mc"

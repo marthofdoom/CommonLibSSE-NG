@@ -141,6 +141,9 @@ namespace RE
 		bool             IsSneakingControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kSneaking); }
 		bool             IsVATSControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kVATS); }
 		bool             IsWheelZoomControlsEnabled() const noexcept { return AreControlsEnabled(UEFlag::kWheelZoom); }
+		PC_GAMEPAD_TYPE  GetGamePadType() const noexcept { return GetRuntimeData().gamePadMapType.get(); }  // upstream 2024-09, through GetRuntimeData()
+		void             PopInputContext(InputContextID a_context);                                         // upstream 2024-09
+		void             PushInputContext(InputContextID a_context);                                        // upstream 2024-09
 
 		// mit-3.7: calls the engine's own ToggleControls (1.5.97 id 67245 at 0xC11C60,
 		// 1.6.1170 id 68545 at 0xCD5650; rcx this, edx flags, r8b enable, r9b

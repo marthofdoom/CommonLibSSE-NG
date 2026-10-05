@@ -1035,12 +1035,12 @@ namespace RE
 		// 363 -> 365 on 1.6.1170). The std::size_t overloads take the running build's
 		// own engine index and are bounds-checked against its count.
 
-		[[nodiscard]] TESForm* GetObject(DefaultObject a_object) const noexcept { return GetObject(GetRuntimeIndex(stl::to_underlying(a_object))); }
+		[[nodiscard]] TESForm* GetObject(DefaultObject a_object) const noexcept { return GetObject(GetRuntimeIndex(std::to_underlying(a_object))); }
 
 		template <class T>
 		[[nodiscard]] T* GetObject(DefaultObject a_object) const noexcept
 		{
-			return GetObject<T>(GetRuntimeIndex(stl::to_underlying(a_object)));
+			return GetObject<T>(GetRuntimeIndex(std::to_underlying(a_object)));
 		}
 
 		[[nodiscard]] TESForm* GetObject(std::size_t a_idx) const noexcept
@@ -1066,7 +1066,7 @@ namespace RE
 
 		[[nodiscard]] bool IsObjectInitialized(DEFAULT_OBJECT a_object) const noexcept
 		{
-			return IsObjectInitialized(GetRuntimeIndex(stl::to_underlying(a_object)));
+			return IsObjectInitialized(GetRuntimeIndex(std::to_underlying(a_object)));
 		}
 
 		[[nodiscard]] bool IsObjectInitialized(DefaultObjectID a_object) const noexcept;

@@ -81,7 +81,7 @@ namespace RE
 				offset = 0x68;
 			} else {
 				stl::report_and_fail(
-					fmt::format(
+					std::format(
 						"CombatController::GetRuntimeData: the member layout past +0x68 is not verified for "
 						"game version {} (verified: 1.6.1170.0, 1.5.97.0)."sv,
 						REL::Module::get().version().string(".")));

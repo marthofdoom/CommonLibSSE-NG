@@ -11,6 +11,13 @@ namespace RE
 		return *singleton;
 	}
 
+	bool TESDataHandler::AddFormToDataHandler(TESForm* a_form)
+	{
+		using func_t = decltype(&TESDataHandler::AddFormToDataHandler);
+		REL::Relocation<func_t> func{ RELOCATION_ID(13597, 13693) };
+		return func(this, a_form);
+	}
+
 	std::uint32_t TESDataHandler::LoadScripts()
 	{
 		using func_t = decltype(&TESDataHandler::LoadScripts);
@@ -167,7 +174,7 @@ namespace RE
 
 	BSTArray<TESForm*>& TESDataHandler::GetFormArray(FormType a_formType)
 	{
-		return formArrays[stl::to_underlying(a_formType)];
+		return formArrays[std::to_underlying(a_formType)];
 	}
 
 	ObjectRefHandle TESDataHandler::CreateReferenceAtLocation(TESBoundObject* a_base, const NiPoint3& a_location, const NiPoint3& a_rotation, TESObjectCELL* a_targetCell, TESWorldSpace* a_selfWorldSpace, TESObjectREFR* a_alreadyCreatedRef, BGSPrimitive* a_primitive, const ObjectRefHandle& a_linkedRoomRefHandle, bool a_forcePersist, bool a_arg11)

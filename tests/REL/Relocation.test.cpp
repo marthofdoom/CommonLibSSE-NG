@@ -1,7 +1,7 @@
 #define CATCH2_CONFIG_MAIN
 #include "catch2/catch_all.hpp"
 
-#include "REL/Relocation.h"
+#include "REL/REL.h"
 #include "SKSE/SKSE.h"
 
 using namespace REL::literals;
@@ -68,10 +68,12 @@ TEST_CASE("Version/std::to_string")
 	CHECK(std::to_string(SKSE::RUNTIME_SSE_1_5_97) == "1.5.97.0");
 }
 
+#ifdef FMT_VERSION
 TEST_CASE("Version/fmt::format")
 {
 	CHECK(fmt::format("Hello {}", SKSE::RUNTIME_SSE_1_5_97) == "Hello 1.5.97.0");
 }
+#endif
 
 TEST_CASE("Version/std::format")
 {

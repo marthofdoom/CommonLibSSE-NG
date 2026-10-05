@@ -132,7 +132,7 @@ namespace RE
 			assert(a_fmt);
 
 			std::va_list args1;
-			va_start(args1, a_severity);
+			va_start(args1, a_fmt);
 			std::va_list args2;
 			va_copy(args2, args1);
 

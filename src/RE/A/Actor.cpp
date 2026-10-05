@@ -267,11 +267,6 @@ namespace RE
 		return obj ? obj->As<TESNPC>() : nullptr;
 	}
 
-	bool Actor::IsLeveled() const
-	{
-		return extraList.GetByType<ExtraLeveledCreature>();
-	}
-
 	float Actor::GetActorValueModifier(ACTOR_VALUE_MODIFIER a_modifier, ActorValue a_value) const
 	{
 		using func_t = decltype(&Actor::GetActorValueModifier);
@@ -416,6 +411,20 @@ namespace RE
 		}
 	}
 
+	TESForm* Actor::GetEquippedObjectInSlot(const BGSEquipSlot* slot) const
+	{
+		auto _currentProcess = GetActorRuntimeData().currentProcess;
+		if (_currentProcess) {
+			for (const auto& equippedObject : _currentProcess->equippedForms) {
+				if (equippedObject.slot == slot) {
+					return equippedObject.object;
+				}
+			}
+		}
+
+		return nullptr;
+	}
+
 	float Actor::GetEquippedWeight()
 	{
 		if (GetActorRuntimeData().equippedWeight < 0.0f) {
@@ -491,6 +500,12 @@ namespace RE
 		}
 	}
 
+	HighProcessData* Actor::GetHighProcess() const
+	{
+		const auto& runtimeData = GetActorRuntimeData();
+		return runtimeData.currentProcess ? runtimeData.currentProcess->high : nullptr;
+	}
+
 	Actor* Actor::GetKiller() const
 	{
 		if (IsDead(false)) {
@@ -505,6 +520,12 @@ namespace RE
 		using func_t = decltype(&Actor::GetLevel);
 		REL::Relocation<func_t> func{ Offset::Actor::GetLevel };
 		return func(this);
+	}
+
+	MiddleHighProcessData* Actor::GetMiddleHighProcess() const
+	{
+		const auto& runtimeData = GetActorRuntimeData();
+		return runtimeData.currentProcess ? runtimeData.currentProcess->middleHigh : nullptr;
 	}
 
 	bool Actor::GetMount(NiPointer<Actor>& a_outMount)
@@ -549,6 +570,15 @@ namespace RE
 		return base ? base->race : nullptr;
 	}
 
+	float Actor::GetRegenDelay(ActorValue a_actorValue) const
+	{
+		const auto& runtimeData = GetActorRuntimeData();
+		if (runtimeData.currentProcess) {
+			return runtimeData.currentProcess->GetRegenDelay(a_actorValue);
+		}
+		return 0.0f;
+	}
+
 	bool Actor::GetRider(NiPointer<Actor>& a_outRider)
 	{
 		using func_t = decltype(&Actor::GetRider);
@@ -578,6 +608,13 @@ namespace RE
 	{
 		using func_t = decltype(&Actor::GetSoulSize);
 		REL::Relocation<func_t> func{ RELOCATION_ID(37862, 38817) };
+		return func(this);
+	}
+
+	float Actor::GetTotalCarryWeight()
+	{
+		using func_t = decltype(&Actor::GetTotalCarryWeight);
+		REL::Relocation<func_t> func{ RELOCATION_ID(36456, 37452) };
 		return func(this);
 	}
 
@@ -691,6 +728,13 @@ namespace RE
 		return func(this, a_spell);
 	}
 
+	void Actor::InitiateDoNothingPackage()
+	{
+		using func_t = decltype(&Actor::InitiateDoNothingPackage);
+		REL::Relocation<func_t> func{ RELOCATION_ID(36408, 37402) };
+		return func(this);
+	}
+
 	void Actor::InterruptCast(bool a_restoreMagicka) const
 	{
 		using func_t = decltype(&Actor::InterruptCast);
@@ -751,11 +795,22 @@ namespace RE
 		return GetActorRuntimeData().boolFlags.all(BOOL_FLAGS::kIsCommandedActor);
 	}
 
-	bool Actor::IsCurrentShout(SpellItem* a_spell)
+	bool Actor::IsCurrentShout(SpellItem* a_power)
 	{
 		using func_t = decltype(&Actor::IsCurrentShout);
 		REL::Relocation<func_t> func{ RELOCATION_ID(37858, 38812) };
-		return func(this, a_spell);
+		return func(this, a_power);
+	}
+
+	bool Actor::IsDualCasting() const
+	{
+		auto _currentProcess = GetActorRuntimeData().currentProcess;
+		if (!_currentProcess) {
+			return false;
+		}
+
+		const auto highProcess = _currentProcess->high;
+		return highProcess && highProcess->isDualCasting;
 	}
 
 	bool Actor::IsEssential() const
@@ -815,6 +870,11 @@ namespace RE
 		using func_t = decltype(&Actor::IsInRagdollState);
 		REL::Relocation<func_t> func{ RELOCATION_ID(36492, 37491) };
 		return func(this);
+	}
+
+	bool Actor::IsLeveled() const
+	{
+		return extraList.GetByType<ExtraLeveledCreature>();
 	}
 
 	bool Actor::IsLimbGone(std::uint32_t a_limb)
@@ -941,6 +1001,13 @@ namespace RE
 	void Actor::RemoveExtraArrows3D()
 	{
 		extraList.RemoveByType(ExtraDataType::kAttachedArrows3D);
+	}
+
+	void Actor::RemoveFromFaction(RE::TESFaction* a_faction)
+	{
+		using func_t = decltype(&Actor::RemoveFromFaction);
+		REL::Relocation<func_t> func{ RELOCATION_ID(36680, 37688) };
+		return func(this, a_faction);
 	}
 
 	bool Actor::RemoveSpell(SpellItem* a_spell)
@@ -1094,6 +1161,14 @@ namespace RE
 		}
 	}
 
+	void Actor::UpdateRegenDelay(ActorValue a_actorValue, float a_regenDelay)
+	{
+		const auto& runtimeData = GetActorRuntimeData();
+		if (runtimeData.currentProcess) {
+			runtimeData.currentProcess->UpdateRegenDelay(a_actorValue, a_regenDelay);
+		}
+	}
+
 	void Actor::UpdateSkinColor()
 	{
 		const auto* npc = GetActorBase();
@@ -1131,7 +1206,7 @@ namespace RE
 			kTotal
 		};
 
-		char addonString[MAX_PATH]{ '\0' };
+		char addonString[REX::W32::MAX_PATH]{ '\0' };
 		a_arma->GetNodeName(addonString, this, a_armor, -1);
 		std::array<NiAVObject*, kTotal> skeletonRoot = { Get3D(k3rd), Get3D(k1st) };
 		if (skeletonRoot[k1st] == skeletonRoot[k3rd]) {
@@ -1184,7 +1259,7 @@ namespace RE
 			if (auto magicCaster = GetActorRuntimeData().magicCasters[i]) {
 				auto castingSource = magicCaster->GetCastingSource();
 				if (magicCaster->currentSpell) {
-					result |= 1 << stl::to_underlying(castingSource);
+					result |= 1 << std::to_underlying(castingSource);
 				}
 			}
 		}

@@ -124,12 +124,12 @@ namespace REL::SelfCheck
 				const auto offset = db.try_id2offset(row.id);
 				if (!offset) {
 					result._failures.push_back({ std::addressof(row),
-						fmt::format("id {} is not in the Address Library (expected RVA 0x{:X})"sv, row.id, row.rva) });
+						std::format("id {} is not in the Address Library (expected RVA 0x{:X})"sv, row.id, row.rva) });
 					continue;
 				}
 				if (*offset != row.rva) {
 					result._failures.push_back({ std::addressof(row),
-						fmt::format("id {} resolves to RVA 0x{:X}, our disassembly says 0x{:X}"sv, row.id, *offset, row.rva) });
+						std::format("id {} resolves to RVA 0x{:X}, our disassembly says 0x{:X}"sv, row.id, *offset, row.rva) });
 					continue;
 				}
 			}
@@ -140,11 +140,11 @@ namespace REL::SelfCheck
 					std::string haveHex;
 					std::string wantHex;
 					for (std::size_t b = 0; b < row.bytesLen; ++b) {
-						haveHex += fmt::format("{:02X}"sv, have[b]);
-						wantHex += fmt::format("{:02X}"sv, row.bytes[b]);
+						haveHex += std::format("{:02X}"sv, have[b]);
+						wantHex += std::format("{:02X}"sv, row.bytes[b]);
 					}
 					result._failures.push_back({ std::addressof(row),
-						fmt::format("bytes at RVA 0x{:X}+0x{:X} are {}, expected {}"sv, row.rva, row.bytesOffset, haveHex, wantHex) });
+						std::format("bytes at RVA 0x{:X}+0x{:X} are {}, expected {}"sv, row.rva, row.bytesOffset, haveHex, wantHex) });
 					continue;
 				}
 			}

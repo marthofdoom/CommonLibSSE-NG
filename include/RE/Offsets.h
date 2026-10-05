@@ -1,6 +1,6 @@
 #pragma once
 
-#include "REL/Relocation.h"
+#include "REL/ID.h"
 
 namespace RE::Offset
 {
@@ -143,6 +143,7 @@ namespace RE::Offset
 		constexpr auto Play = RELOCATION_ID(66355, 67616);
 		constexpr auto SetObjectToFollow = RELOCATION_ID(66375, 67636);
 		constexpr auto SetPosition = RELOCATION_ID(66370, 67631);
+		constexpr auto Pause = RELOCATION_ID(66357, 67618);
 		constexpr auto Stop = RELOCATION_ID(66358, 67619);
 	}
 
@@ -478,14 +479,6 @@ namespace RE::Offset
 	{
 		constexpr auto FirstConsoleCommand = RELOCATION_ID(501797, 365650);
 		constexpr auto FirstScriptCommand = RELOCATION_ID(501789, 361120);
-	}
-
-	namespace Sky
-	{
-		constexpr auto GetSingleton = RELOCATION_ID(13789, 13878);
-		constexpr auto SetWeather = RELOCATION_ID(25694, 26241);
-		constexpr auto ForceWeather = RELOCATION_ID(25696, 26243);
-		constexpr auto ResetWeather = RELOCATION_ID(25695, 26242);
 	}
 
 	namespace SkyrimVM
