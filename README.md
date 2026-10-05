@@ -44,8 +44,82 @@ Each item is one commit, and the commit message carries the addresses and instru
 - `TESForm::LookupByID` and `LookupByEditorID` hold the game's own read lock on the form maps. In 3.7.0 they
   copied the lock and held nothing, so a lookup from another thread could read a map the game was changing.
 
-Nothing is guessed for other builds. VR and 1.7.x are not verified here, and the new accessors refuse them.
+### Stage F2a: Skyrim 1.7.104
+
+- 1.7.x is filed with AE, because it continues the AE id column. `SKSE::RUNTIME_SSE_1_7_104` names the build.
+- On 1.7.104.0 the ids come from our own id table, not from the Address Library. See "The 1.7.104 id table"
+  below. Every other 1.7.x build is refused when the plugin loads, with a message.
+- Every exact-build layout from F1 has a 1.7.104 arm, proven from the 1.7.104 executable: the default object
+  manager (372 objects, flags at +0xBC0, six objects inserted), ControlMap (as 1.6.1170), CombatController (as
+  1.6.1170), and `GetMagicTarget` (same shape).
+- `PlayerCharacter` gained a base class on 1.7.104, so everything it declares itself sits 8 bytes further. Its
+  accessors follow the exact build.
+- `BSInputDeviceManager` has six device slots on 1.7.104, with the virtual keyboard in slot 5. Use `GetDevice`.
+- `BSInputEventQueue` gained three event kinds on 1.7.104. The members after the six counts are accessors now.
+
+Nothing is guessed for other builds. VR is not verified here, and the new accessors refuse it.
 Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()` there is the safe behaviour.
+
+## Supported game versions
+
+| game version | where ids come from | layouts |
+|---|---|---|
+| 1.5.97.0 | the Address Library (`version-1-5-97-0.bin`) | verified |
+| 1.6.1170.0 | the Address Library (`versionlib-1-6-1170-0.bin`) | verified |
+| 1.7.104.0 | our id table (`mit-idtable-1-7-104-0.bin`) | verified |
+| other 1.5.x and 1.6.x | the Address Library | upstream 3.7.0 values. The F1 accessors refuse them by name. |
+| other 1.7.x | none. The plugin stops at load with a message. | none |
+| VR | the VR Address Library CSV | upstream 3.7.0 values, not verified |
+
+## Using this fork
+
+It builds like any CommonLibSSE-NG 3.7.0 project. The easy way is my vcpkg registry. In your project's
+`vcpkg-configuration.json`, add the registry for the one port:
+
+```json
+{
+    "default-registry": {
+        "kind": "git",
+        "repository": "https://github.com/microsoft/vcpkg.git",
+        "baseline": "<a microsoft/vcpkg commit>"
+    },
+    "registries": [
+        {
+            "kind": "git",
+            "repository": "https://github.com/marthofdoom/vcpkg-registry",
+            "baseline": "<a marthofdoom/vcpkg-registry commit>",
+            "packages": [ "commonlibsse-ng" ]
+        }
+    ]
+}
+```
+
+Then keep `commonlibsse-ng` in `vcpkg.json` and use `find_package(CommonLibSSE CONFIG REQUIRED)` with
+`add_commonlibsse_plugin(...)` as usual. The registry baseline pins the exact fork commit, so a newer fork
+needs a newer baseline. If your CI caches vcpkg packages, put `vcpkg-configuration.json` in the cache key, or an
+old build of the library hides the new one.
+
+## The 1.7.104 id table
+
+The Address Library does not ship a 1.7.104 file in a format 3.7.0 reads, and I do not use its newer files.
+So on 1.7.104.0 this fork reads `Data/SKSE/Plugins/mit-idtable-1-7-104-0.bin` instead.
+
+- The format is in [docs/MIT-ID-TABLE-FORMAT.md](docs/MIT-ID-TABLE-FORMAT.md). It is a small header, sorted
+  `{id, rva}` records and a checksum.
+- The ids are the AE ids, the second id in `RELOCATION_ID(se, ae)`. Nothing changes in your code.
+- The file is bound to one exact executable. Its header holds the version, the PE timestamp and the image size,
+  and the fork checks all three against the running game.
+- Each plugin reads the file into its own memory. Nothing is shared between plugins.
+- If the file is missing, damaged or for another executable, the game stops with a message naming the file.
+- **Coverage is not complete.** The table holds the ids my mods use, each one mapped from 1.6.1170 to 1.7.104
+  by disassembly, with its evidence. If your plugin asks for an id that is not in it, the game stops with a
+  message naming the id and the file. It never returns a wrong address. To add ids, map them on the 1.7.104
+  executable, add them to a CSV, and rebuild the file with
+  [tools/mit-idtable](tools/mit-idtable/README.md).
+- The table built for this fork is in `data/`. The file ships next to the plugins that need it, in
+  `Data/SKSE/Plugins/`.
+- On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
+  `GetDevice` and `GetVirtualKeyboard` handle that. The device number inside its input events is not verified.
 
 Later changes come in stages. First come fixes I verified against the game's own code on 1.5.97 and 1.6.1170.
 Then comes support for 1.7.104 that I write from the file format and my own disassembly. No code from the GPL fork
