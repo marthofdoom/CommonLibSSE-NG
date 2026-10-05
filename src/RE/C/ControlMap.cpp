@@ -17,19 +17,20 @@ namespace RE
 		// mit-3.7: the verified builds. See ControlMap.h for the evidence.
 		bool IsAE1170() noexcept { return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170); }
 		bool IsSE197() noexcept { return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_5_97); }
+		bool Is17104() noexcept { return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104); }
 
 		std::string UnverifiedMessage(std::string_view a_what)
 		{
 			return std::format(
 				"ControlMap::{}: the ControlMap layout is not verified for game version {} "
-				"(verified: 1.6.1170.0, 1.5.97.0)."sv,
+				"(verified: 1.6.1170.0, 1.5.97.0, 1.7.104.0)."sv,
 				a_what, REL::Module::get().version().string("."sv));
 		}
 	}
 
 	bool ControlMap::IsRuntimeDataVerified() noexcept
 	{
-		return IsAE1170() || IsSE197();
+		return IsAE1170() || IsSE197() || Is17104();
 	}
 
 	ControlMap::RUNTIME_DATA& ControlMap::GetRuntimeData() noexcept
@@ -44,6 +45,8 @@ namespace RE
 			offset = 0xF0;
 		} else if (IsSE197()) {
 			offset = 0xE8;
+		} else if (Is17104()) {
+			offset = 0xF0;
 		} else {
 			stl::report_and_fail(UnverifiedMessage("GetRuntimeData"sv));
 		}
@@ -61,6 +64,10 @@ namespace RE
 		} else if (IsSE197()) {
 			count = 17;
 			index = std::to_underlying(a_context);
+		} else if (Is17104()) {
+			count = 18;
+			// Same 18 contexts as 1.6.1170 (see ControlMap.h): kFavor is 17.
+			index = a_context == InputContextID::kFavor ? 17 : std::to_underlying(a_context);
 		} else {
 			static std::atomic_flag reported = ATOMIC_FLAG_INIT;
 			if (!reported.test_and_set()) {
@@ -140,7 +147,7 @@ namespace RE
 		// 1.6.1170 Push id 68543 at 0xCD5450 rejects edx >= 0x12; both push onto
 		// contextPriorityStack (+0x100 / +0x108). Pop ids 67244 / 68544 (0xC11BC0 /
 		// 0xCD5530) walk the same stack. The enum is numbered as on 1.5.97, so kFavor is
-		// translated to 17 on 1.6.1170 exactly as GetInputContext does. Unverified builds
+		// translated to 17 on 1.6.1170 and 1.7.104 exactly as GetInputContext does. Unverified builds
 		// are refused (one critical log line, no call).
 		std::optional<std::uint32_t> RuntimeContextId(ControlMap::InputContextID a_context, std::string_view a_what)
 		{
@@ -149,6 +156,12 @@ namespace RE
 			}
 			if (IsSE197()) {
 				return static_cast<std::uint32_t>(std::to_underlying(a_context));
+			}
+			if (Is17104()) {
+				// 1.7.104 Push 0xCEF8A0 / Pop 0xCEF980 (ids 68543 / 68544 through the id table)
+				// are instruction-identical to 1.6.1170's: the same cmp edx,0x12 bound, the stack
+				// at +0x108 and its size at +0x118. Same 18 contexts, so kFavor is 17.
+				return a_context == ControlMap::InputContextID::kFavor ? 17u : static_cast<std::uint32_t>(std::to_underlying(a_context));
 			}
 			static std::atomic_flag reported = ATOMIC_FLAG_INIT;
 			if (!reported.test_and_set()) {

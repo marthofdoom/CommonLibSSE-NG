@@ -6290,9 +6290,12 @@ namespace RE
 	constexpr std::array<REL::VariantID, 1>  VTABLE_AutoRegisterPathing_MovementMessagePlayIdle_BSTSmartPointerPathingFactoryManager_MovementMessage_64__{ REL::VariantID(295087, 246201, 0x18ac238) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_MovementMessagePlayIdle{ REL::VariantID(295085, 246203, 0x18ac1a0) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_AutoRegisterPathing_MovementMessageFreezeDirection_BSTSmartPointerPathingFactoryManager_MovementMessage_64__{ REL::VariantID(295092, 246206, 0x18ac330) };
-	constexpr std::array<REL::VariantID, 1>  VTABLE_BSTDerivedCreator_MovementMessageFreezeDirection_MovementMessage_{ REL::VariantID(563120, 246208, 0x18ac2d0) };
+	// mit-3.7: the AE ids of the next line and of the AutoRegisterCreator_MovementMessageFreezeDirection line were swapped upstream.
+	// 1.6.1170: 246214 -> 0x1A45440 (COL .?AU?$BSTDerivedCreator@VMovementMessageFreezeDirection@@...), 246208 -> 0x1A45480
+	// (COL .?AU?$AutoRegisterCreator@VMovementMessageFreezeDirection@@...). The SE ids were right (563120 -> 0x17FBCB0 BSTDerivedCreator).
+	constexpr std::array<REL::VariantID, 1>  VTABLE_BSTDerivedCreator_MovementMessageFreezeDirection_MovementMessage_{ REL::VariantID(563120, 246214, 0x18ac2d0) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_AutoRegisterFactory_BSTDerivedCreator_MovementMessageFreezeDirection_MovementMessage__BSTSmartPointerPathingFactoryManager_MovementMessage_64__{ REL::VariantID(295091, 246212, 0x18ac2f0) };
-	constexpr std::array<REL::VariantID, 1>  VTABLE_AutoRegisterCreator_MovementMessageFreezeDirection_BSTSmartPointerPathingFactoryManager_MovementMessage_64__{ REL::VariantID(563125, 246214, 0x18ac310) };
+	constexpr std::array<REL::VariantID, 1>  VTABLE_AutoRegisterCreator_MovementMessageFreezeDirection_BSTSmartPointerPathingFactoryManager_MovementMessage_64__{ REL::VariantID(563125, 246208, 0x18ac310) };  // mit-3.7: AE id swapped back (see above)
 	constexpr std::array<REL::VariantID, 1>  VTABLE_MovementMessageFreezeDirection{ REL::VariantID(295090, 246218, 0x18ac298) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_BSTDerivedCreator_MovementMessageSetStaticPath_MovementMessage_{ REL::VariantID(563131, 246221, 0x18ac3d0) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_AutoRegisterFactory_BSTDerivedCreator_MovementMessageSetStaticPath_MovementMessage__BSTSmartPointerPathingFactoryManager_MovementMessage_64__{ REL::VariantID(295096, 246225, 0x18ac3f0) };
@@ -6671,6 +6674,9 @@ namespace RE
 	constexpr std::array<REL::VariantID, 1>  VTABLE_bnet__CallbackWrapper_bnet__Callback_bnet_std__void_t_bnet__HttpResponseInfo___lambda_8f4c3030725a4741f42837bac0b4eaa3__{ REL::VariantID(0, 248733, 0x0) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_bnet__CallbackWrapper_bnet__Callback_bnet_std__void_t_bnet__WebSocketStatus___lambda_3757cc6ae04895e7fd4a9ac3ad51f44c__{ REL::VariantID(0, 248735, 0x0) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_std__exception{ REL::VariantID(298100, 248772, 0x1911b40) };
+	// mit-3.7: std::bad_weak_ptr has a TypeDescriptor but NO vtable (no CompleteObjectLocator) in 1.5.97, 1.6.1170 or 1.7.104,
+	// and 248775 is not in the 1.6.1170 Address Library. Kept so code that names it still compiles. Resolving it is a
+	// fatal "id not found" on 1.6.1170 and an "absent" record on 1.7.104. Do not use it.
 	constexpr std::array<REL::VariantID, 1>  VTABLE_std__bad_weak_ptr{ REL::VariantID(298102, 248775, 0x0) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_bnet__Callback_bnet__Notification__Frame_bnet__WebSocketStatus_{ REL::VariantID(0, 248778, 0x0) };
 	constexpr std::array<REL::VariantID, 1>  VTABLE_bnet__Notification__UserWebSocket__OnConnected{ REL::VariantID(0, 248780, 0x0) };

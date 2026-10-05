@@ -88,8 +88,12 @@ namespace RE
 		//   1.6.1170 (0xCD4699): memset(this+0x60, 0, 0x90) = 18 contexts, BSTArray
 		//            ctors at +0xF0 / +0x108, [+0x120]=0xFFFFFFFF, [+0x124]=0x80000000,
 		//            word [+0x128]=0, byte [+0x12A]=0, [+0x12C]=0.
+		//   1.7.104  (0xCEEAA0, stores the singleton at 0x31A5690): memset(this+0x60, 0,
+		//            0x90) at 0xCEEBAE = 18 contexts, and every member store matches
+		//            1.6.1170 (+0xF0 / +0x108 / +0x120 / +0x124 / +0x128 / +0x12A / +0x12C).
+		//            0x3345A8 reads enabledControls at +0x120.
 		// So everything past controlMap[] is RUNTIME_DATA, at +0xE8 on 1.5.97 and +0xF0
-		// on 1.6.1170. Upstream declared the 1.5.97 layout for both, and its inline
+		// on 1.6.1170 and 1.7.104. Upstream declared the 1.5.97 layout for both, and its inline
 		// ToggleControls wrote +0x118, which on 1.6.1170 is contextPriorityStack's
 		// size (the crash in MFO CLAUDE.md principle 11).
 		struct RUNTIME_DATA
@@ -111,7 +115,7 @@ namespace RE
 		static ControlMap* GetSingleton();
 
 		// mit-3.7: RUNTIME_DATA at the running build's offset. On a build whose layout
-		// is not verified (anything but 1.5.97.0 / 1.6.1170.0) this is a named fatal
+		// is not verified (anything but 1.5.97.0 / 1.6.1170.0 / 1.7.104.0) this is a named fatal
 		// error, never a guessed offset. IsRuntimeDataVerified() lets a caller check first.
 		[[nodiscard]] static bool IsRuntimeDataVerified() noexcept;
 		[[nodiscard]] RUNTIME_DATA&       GetRuntimeData() noexcept;
@@ -122,8 +126,11 @@ namespace RE
 		// at 16, so kFavor is 17 there. Contexts 0..15 are the same on both builds
 		// (menu ctors write the same inputContext: Favorites 6, Map 7, Book 10,
 		// Journal 12, Lockpicking 15; IMenu's kNone is 0x12 on 1.5.97, 0x13 on
-		// 1.6.1170). On an unverified build every lookup is refused (nullptr, one
-		// critical log line). Prefer this to indexing controlMap[] directly.
+		// 1.6.1170). 1.7.104 numbers them as 1.6.1170: its 103 ControlMap users pass
+		// the same context ids as their 1.6.1170 twins (kFavor 0x11 at 0x58049E against
+		// 1.6.1170's 0x578097, 0x12 at 0x58047B against 0x578068). On an unverified
+		// build every lookup is refused (nullptr, one critical log line). Prefer this to
+		// indexing controlMap[] directly.
 		[[nodiscard]] InputContext* GetInputContext(InputContextID a_context) const noexcept;
 
 		std::int8_t      AllowTextInput(bool a_allow);
@@ -150,13 +157,14 @@ namespace RE
 		// storeState). It sets or clears enabledControls, and with storeState it does
 		// the same to the saved state unless that is kInvalid, then sends
 		// UserEventEnabled{new, old} from the event source at +0x08. storeState = true
-		// is exactly what 3.7.0's inline version meant to do. The engine function reads
+		// is exactly what 3.7.0's inline version meant to do (1.7.104 resolves id 68545 to
+		// 0xCEFAA0 through its id table). The engine function reads
 		// its own build's layout, so this is correct wherever the id resolves; VR has
 		// no verified id and is a named fatal error.
 		void ToggleControls(UEFlag a_flags, bool a_enable, bool a_storeState = true);
 
 		// members
-		InputContext* controlMap[InputContextID::kTotal];  // 060 - 17 declared; 18 on 1.6.1170, use GetInputContext
+		InputContext* controlMap[InputContextID::kTotal];  // 060 - 17 declared; 18 on 1.6.1170 and 1.7.104, use GetInputContext
 		                                                   // everything after this: GetRuntimeData()
 	};
 	static_assert(sizeof(ControlMap) == 0xE8);

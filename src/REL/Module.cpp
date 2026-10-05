@@ -45,6 +45,6 @@ namespace REL
 			segment = {};
 		}
         IDDatabase::_instance.clear();
-        IDDatabase::_initialized = false;
+        IDDatabase::_initialized.store(false, std::memory_order_release);
 	}
 }

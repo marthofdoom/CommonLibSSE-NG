@@ -92,6 +92,8 @@ namespace SKSE
 				// 0x1892F80), the AE twin of SE 508778 by six xrefs of the same shape (SE
 				// 0x148CD9 / 0x5AE0E0 / 0x5AE102 / 0x5AE825 / 0x5B742B / 0x5B74BA; AE
 				// 0x191589 / 0x640214 / 0x640236 / 0x640CE5 / 0x64B1A8 / 0x64B284).
+				// 1.7.104 is AE and newer than 1.6.1130, so it takes 502114, which the MIT id
+				// table maps to RVA 0x20B5798, a pointer to .rdata "Skyrim Special Edition".
 				// Upstream 3.7.0 used 380738 everywhere, which on 1.6.1170 fell through to
 				// 380740 ("Skyrim.INI"). This function returns an optional, so a build
 				// whose library lacks the id is NEVER fatal: it is logged and returns

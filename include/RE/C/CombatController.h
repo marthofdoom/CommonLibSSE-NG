@@ -39,9 +39,12 @@ namespace RE
 		//   1.6.1170 ctor 0x558070 (id 33214, new(0xE0)): [+0x68]=0 (8 bytes, new),
 		//            [+0x70] [+0x78]=0, BSTArray at +0x80 and +0xA0, [+0x98] [+0xB8]
 		//            [+0xC0]=0, dword [+0xC8]=0, [+0xD0] [+0xD8]=0.
+		//   1.7.104  ctor 0x55FEE0 (new(0xE0) at 0x69A0A7, 0x852112, 0x852249): the same
+		//            instructions as 1.6.1170's 0x558070, every member offset equal.
 		// GetMagicTarget confirms the tail: 1.6.1170 0x81E020 reads handleCount +0xC8,
-		// cachedAttacker +0xD0, cachedTarget +0xD8; 1.5.97 0x782100 reads +0xC0,
-		// +0xC8, +0xD0. The members below +0x68 are the same on both.
+		// cachedAttacker +0xD0, cachedTarget +0xD8; 1.7.104 0x833510 reads the same
+		// three; 1.5.97 0x782100 reads +0xC0, +0xC8, +0xD0. The members below +0x68
+		// are the same on all three.
 		struct RUNTIME_DATA
 		{
 		public:
@@ -61,10 +64,12 @@ namespace RE
 		static_assert(sizeof(RUNTIME_DATA) == 0x70);
 
 		// mit-3.7: RUNTIME_DATA at the running build's offset (+0x68 on 1.5.97.0,
-		// +0x70 on 1.6.1170.0). Any other build is a named fatal error, never a guess.
+		// +0x70 on 1.6.1170.0 and 1.7.104.0). Any other build is a named fatal error,
+		// never a guess.
 		[[nodiscard]] static bool IsRuntimeDataVerified() noexcept
 		{
-			return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170) || REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_5_97);
+			return REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170) || REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_5_97) ||
+			       REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104);
 		}
 
 		[[nodiscard]] RUNTIME_DATA& GetRuntimeData() noexcept
@@ -79,11 +84,13 @@ namespace RE
 				offset = 0x70;
 			} else if (REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_5_97)) {
 				offset = 0x68;
+			} else if (REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104)) {
+				offset = 0x70;
 			} else {
 				stl::report_and_fail(
 					std::format(
 						"CombatController::GetRuntimeData: the member layout past +0x68 is not verified for "
-						"game version {} (verified: 1.6.1170.0, 1.5.97.0)."sv,
+						"game version {} (verified: 1.6.1170.0, 1.5.97.0, 1.7.104.0)."sv,
 						REL::Module::get().version().string(".")));
 			}
 			return *reinterpret_cast<const RUNTIME_DATA*>(reinterpret_cast<std::uintptr_t>(this) + offset);

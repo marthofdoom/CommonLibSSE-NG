@@ -1,34 +1,100 @@
-# CommonLibSSE NG
-[![C++23](https://img.shields.io/static/v1?label=standard&message=c%2B%2B20&color=blue&logo=c%2B%2B&&logoColor=white&style=flat)](
-https://en.cppreference.com/w/cpp/compiler_support)
-![Platform](https://img.shields.io/static/v1?label=platform&message=windows&color=dimgray&style=flat&logo=windows)
-[![Latest Release](https://img.shields.io/github/v/release/CharmedBaryon/CommonLibSSE-NG?logo=pkgsrc&logoColor=white)](#use)
-[![Main CI](https://img.shields.io/github/workflow/status/CharmedBaryon/CommonLibSSE-NG/Main%20CI/main?logo=github&label=tests)](
-https://github.com/CharmedBaryon/CommonLibSSE-NG/actions/workflows/main_ci.yml)
+# CommonLibSSE-NG, MIT line (3.7.0)
 
-CommonLibSSE NG is a fork of CommonLibSSE which tracks upstream updates but adds a number of enhancements.
+A continuation of [CharmedBaryon's CommonLibSSE-NG](https://github.com/CharmedBaryon/CommonLibSSE-NG) 3.7.0, kept on
+its MIT license, with fixes verified against the game's own code and support for Skyrim SE 1.7.104. It is a
+modders resource, like the library it continues. Use it the same way you would use CommonLibSSE-NG 3.7.0.
+
+- Branch: `main`. It starts at the upstream v3.7.0 commit `c4ab853d095e81e3390b282d7ba01ab2f24ebf25`. The old
+  upstream main is kept as the branch `upstream-main`.
+- License: MIT, unchanged. The original LICENSE file and its copyright notice stay as they are. New files carry
+  my own notice under the same MIT terms.
 
 ## Why this fork exists
 
-This is CommonLibSSE-NG 3.7.0 from CharmedBaryon, kept on its MIT license. The branch `mit-3.7` starts exactly at
-the upstream v3.7.0 commit `c4ab853d095e81e3390b282d7ba01ab2f24ebf25`. The maintained fork moved to
-GPL-3.0-or-later (with modding exceptions). My mods are MIT, so I keep an MIT line of 3.7.0 instead.
+The maintained CommonLibSSE-NG moved to GPL-3.0-or-later (with modding exceptions). My mods are MIT, so I keep an
+MIT line of 3.7.0 instead.
 
-The license does not change. The original LICENSE file and its copyright notice stay as they are. New files will
-carry my own notice under the same MIT terms.
+**Clean room.** No code from the GPL line is in here. I read it only to learn that a problem exists. Every fix and
+every addition here is written from the game executables and from file bytes, and each commit message carries the
+addresses and instructions that prove it. If a fix here disagrees with a header somewhere else, the disassembly
+note in the commit is the reason.
 
-My mods consume it through my own vcpkg registry, [marthofdoom/vcpkg-registry](https://github.com/marthofdoom/vcpkg-registry).
+## Supported game versions
 
-### What changed from 3.7.0 (stage F1, verified on 1.6.1170.0 and 1.5.97.0)
+| game version | where ids come from | struct layouts |
+|---|---|---|
+| **1.5.97.0** | the Address Library, `version-1-5-97-0.bin` | verified |
+| **1.6.1170.0** | the Address Library, `versionlib-1-6-1170-0.bin` | verified |
+| **1.7.104.0** (Steam) | this fork's own id table, `mit-idtable-v1-1-7-104-0.bin` (see below) | verified |
+| other 1.5.x and 1.6.x | the Address Library | upstream 3.7.0 values, not verified. The exact-build accessors refuse them by name. |
+| other 1.7.x | none. The plugin stops at load with a message. | none |
+| VR | the VR Address Library CSV | upstream 3.7.0 values, not verified |
 
-Each item is one commit, and the commit message carries the addresses and instructions that prove it.
+**How exact-version gating works.** `REL::Module::IsAE()` and `IsSE()` are buckets: AE is every 1.6.x and 1.7.x,
+SE is every 1.5.x. A layout that was verified on one build is not verified on the rest of its bucket. So this fork
+adds `REL::Module::IsExactly(version)` and the constants `SKSE::RUNTIME_SSE_1_6_1170` and
+`SKSE::RUNTIME_SSE_1_7_104`, and every layout it corrects is chosen by the EXACT build:
 
-- An Address Library id that is not in the library stops the game with a message naming the id. Before, it
-  quietly used the next id's address. `IDDatabase::try_id2offset` is the quiet version for self-checks.
-- `SKSE::log::log_directory` uses the real AE id for the My Games folder name (502114, not 380738).
-- `REL::Module::IsExactly(version)` and `SKSE::RUNTIME_SSE_1_6_1170`, so code can check the exact build.
+- Each verified build gets its own arm, with the offsets proven on that executable.
+- A build with no arm is refused. Where a wrong value could crash, it stops the game with a message naming the
+  game version (`ControlMap::GetRuntimeData`, `CombatController::GetRuntimeData`). Where a refusal is enough, it
+  logs one critical line and returns nothing (`BGSDefaultObjectManager::GetObject`, `ControlMap::GetInputContext`).
+- Nothing is guessed. A value is never taken from a neighbouring build.
+
+Use `IsExactly` in your own code for anything you verified on one build only.
+
+## Using this fork
+
+The easy way is my vcpkg registry, [marthofdoom/vcpkg-registry](https://github.com/marthofdoom/vcpkg-registry).
+It serves one port, `commonlibsse-ng`, built from this repository. In your project's `vcpkg-configuration.json`,
+send that one port to the registry:
+
+```json
+{
+    "default-registry": {
+        "kind": "git",
+        "repository": "https://github.com/microsoft/vcpkg.git",
+        "baseline": "<a microsoft/vcpkg commit>"
+    },
+    "registries": [
+        {
+            "kind": "git",
+            "repository": "https://github.com/marthofdoom/vcpkg-registry",
+            "baseline": "<a marthofdoom/vcpkg-registry commit>",
+            "packages": [ "commonlibsse-ng" ]
+        }
+    ]
+}
+```
+
+Then keep `commonlibsse-ng` in `vcpkg.json` and use `find_package(CommonLibSSE CONFIG REQUIRED)` and
+`add_commonlibsse_plugin(...)` as usual (see "Use" below). The registry baseline pins one exact commit of this
+fork, so a newer fork needs a newer baseline. The port version goes up with every new fork commit. If your CI
+caches vcpkg packages, put `vcpkg-configuration.json` in the cache key, or an old build of the library hides the
+new one.
+
+On 1.7.104 your plugin also needs the id table, as a mod requirement, never bundled (see below). Build with AE
+enabled (the default multi-runtime build does): 1.7.104 uses the AE ids, so an SE-only build stops on its first id
+there.
+
+## What changed from 3.7.0
+
+Each item is one commit, and the commit message carries the proof.
+
+### F0: the fork
+
+- This branch and the vcpkg registry. No source change from 3.7.0.
+
+### F1: corrections, verified on 1.6.1170.0 and 1.5.97.0
+
+- **An id that is not in the Address Library stops the game** with a message naming the id and the game version.
+  Before, it quietly used the next id's address on SE and AE. `IDDatabase::try_id2offset` is the quiet version
+  for self-checks.
+- `SKSE::log::log_directory` reads the game's own My Games folder name (the id follows the build since the sync,
+  see below).
+- `REL::Module::IsExactly(version)` and `SKSE::RUNTIME_SSE_1_6_1170`.
 - `BGSDefaultObjectManager` reads the real object and flag arrays of the exact build (366 objects and flags at
-  +0xB90 on 1.6.1170, 364 and +0xB80 on 1.5.97). Any other build is refused with a log line.
+  +0xB90 on 1.6.1170, 364 and +0xB80 on 1.5.97). The enums keep the 1.5.97 numbering and are translated.
 - `CombatMagicCaster::GetMagicTarget` returns its 16-byte target the way the game does (a hidden out-slot).
 - `ControlMap`: the members after the context array move by 8 on 1.6.1170 (18 contexts, not 17), so they sit
   behind `GetRuntimeData()`. `GetInputContext` maps kFavor to 17 there. `ToggleControls` calls the game's own
@@ -36,10 +102,10 @@ Each item is one commit, and the commit message carries the addresses and instru
 - `CombatController`: the members from +0x68 move by 8 on 1.6.1170, so they sit behind `GetRuntimeData()`.
 - New bindings from my upstream PRs: `Actor::StartCombat` (#107), the `ExtraDataList` constructor (#108, with a
   heap size fix: the game object is 0x18 or 0x20 bytes, not 0x10), `SendInventoryUpdateMessage` (#109).
-- `REL::SelfCheck`: a consumer lists the ids it hooks with the RVAs its own disassembly found, and refuses a
-  hook whose id the loaded library places anywhere else.
+- `REL::SelfCheck`: a plugin lists the ids it hooks with the RVAs its own disassembly found, and refuses a hook
+  whose id the loaded library places anywhere else. `SelfCheck::kLibrary` names the fork stage for a startup log.
 
-### Stage F1b
+### F1b
 
 - `TESForm::LookupByID` and `LookupByEditorID` hold the game's own read lock on the form maps. In 3.7.0 they
   copied the lock and held nothing, so a lookup from another thread could read a map the game was changing.
@@ -110,13 +176,145 @@ Two upstream defects are fixed here. `TESObjectREFR::HasKeywordWithType` derefer
 Upstream's `SKYRIM_SUPPORT_AE` blocks (`TES`, `InterfaceStrings`, `BGSSaveLoadManager`, `UserEvents`) stay dead
 here, the same as in 3.7.0. Nothing defines that macro in an NG build.
 
-Nothing is guessed for other builds. VR and 1.7.x are not verified here, and the new accessors refuse them.
+### F2a: Skyrim 1.7.104
+
+- 1.7.x is filed with AE, because it continues the AE id column. `SKSE::RUNTIME_SSE_1_7_104` names the build.
+- On 1.7.104.0 the ids come from this fork's own id table, never from the Address Library. Every other 1.7.x
+  build is refused when the plugin loads.
+- The id table format ([docs/MIT-ID-TABLE-FORMAT.md](docs/MIT-ID-TABLE-FORMAT.md)) and its generator
+  ([tools/mit-idtable](tools/mit-idtable/README.md)). The table built for this fork is in `data/`.
+- Every exact-build layout from F1 has a 1.7.104 arm: the default object manager (372 objects, flags at +0xBC0,
+  six objects inserted, enums translated), ControlMap (as 1.6.1170), CombatController (as 1.6.1170),
+  `GetMagicTarget` (same shape).
+- `PlayerCharacter` gained a base class on 1.7.104, so everything it declares itself sits 8 bytes further. Its
+  accessors follow the exact build.
+- `BSInputDeviceManager` has six device slots on 1.7.104, with the virtual keyboard in slot 5. Use `GetDevice`.
+- `BSInputEventQueue` gained three event kinds on 1.7.104. The members after the six counts are accessors now.
+- `ControlMap::PushInputContext` and `PopInputContext` (from the sync) have a 1.7.104 arm: the engine functions
+  are instruction-identical to 1.6.1170's (the same 0x12 bound, stack at +0x108, size at +0x118), and kFavor is 17.
+- `log_directory` on 1.7.104 takes 502114 (it is newer than 1.6.1130), which the table maps to the pointer to
+  "Skyrim Special Edition".
+- The id table has a revision, and a plugin can require one: `REL::IDDatabase::RequireMitTableRevision(n)`.
+- Upstream id bugs found while mapping every id, each checked against the 1.6.1170 library and executable:
+  - `VTABLE_BSTDerivedCreator_MovementMessageFreezeDirection_MovementMessage_` and
+    `VTABLE_AutoRegisterCreator_MovementMessageFreezeDirection_..._MovementMessage_64__` had each other's AE ids
+    (246208 and 246214). Swapped back.
+  - Four AE ids were retired after 1.6.659 and do not exist in the 1.6.1130, 1.6.1170 or 1.6.1179 libraries:
+    `GetCachedString` 69188 is now 443410, `Set_CStr` 11044 is now 439876, `SelectedRef` 405935 is now 504099,
+    `CompileAndRun` 21890 is now 441582. After the sync, `BSScaleformExternalTexture::ReleaseTexture` 82317 is now
+    443440. With F1 a lookup of the old ids already stopped the game. Now they work.
+  - `InventoryChanges::RemoveAllItems` (AE 16118) is retired the same way, and its current id is NOT proven yet.
+    It keeps 16118 with a loud comment, so a call still stops the game with the id named on 1.6.1170 and 1.7.104.
+  - `VTABLE_std__bad_weak_ptr` (248775) has no vtable in any executable. It is kept so code still compiles, and is
+    documented as absent.
+- The id table can mark an id as absent (known not to exist in that game version), and a lookup says so.
+- `REL::IDDatabase::get()` and `REL::Module::get()` check again under their lock. In 3.7.0 every thread that waited
+  on the lock loaded the database again, rewriting it under readers.
+
 Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()` there is the safe behaviour.
 
-Later changes come in stages. First come fixes I verified against the game's own code on 1.5.97 and 1.6.1170.
-Then comes support for 1.7.104 that I write from the file format and my own disassembly. No code from the GPL fork
-goes in here. Every change says what it fixes and how it was proven. If a fix here disagrees with a header somewhere
-else, the disassembly note in the commit is the reason.
+## The 1.7.104 id table
+
+I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork reads
+`Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` instead.
+
+- **Format 1.0.** [docs/MIT-ID-TABLE-FORMAT.md](docs/MIT-ID-TABLE-FORMAT.md): a header, sorted `{id, rva}`
+  records, and a checksum. The ids are the AE ids, the second id in `RELOCATION_ID(se, ae)`, so nothing changes
+  in your code. Readers accept every 1.x: a later minor may add header or record fields, and a reader skips what it
+  does not know. A new major gets a new file name (the `v1` part), so old plugins keep their file.
+- **Bound to one executable: the Steam 1.7.104.0 SkyrimSE.exe.** The header holds the version, the module name, and
+  the PE timestamp and image size of the executable it was built from. The fork checks all of them against the
+  running game. Any other 1.7.104 build is refused with a message, because the same version number can be a
+  different build with different addresses.
+- **Private.** Each plugin reads the file into its own memory. Nothing is shared between plugins, and nothing goes
+  into the shared mapping the Address Library path uses.
+- **Coverage today (revision 2): every id this fork names.** 17,750 records: **16,501 mapped** (630 functions,
+  125 globals, 410 NiRTTI objects, 8,016 vtables, 7,320 RTTI type descriptors) and **1,249 absent** ids that do not
+  exist in 1.7.104 (1,247 retired or removed classes, 1 constructor the game inlined, 1 vtable no executable has).
+  Revision 2 adds the 58 ids the upstream sync brought in and the corrected ReleaseTexture id. Each mapped id was
+  carried from its 1.6.1170 address to 1.7.104 by disassembly, with its evidence and a crosscheck: by exact RTTI or
+  import name, by a function signature that occurs once in each executable, or through callers, callees and data
+  references already mapped. The mapper got 107 of 107 known pairs right, and every precision self-test came out 0
+  wrong (`data/selftest-1.7.104-fork-full.md`). Left out on purpose: 25 ids whose only meaning is the fork's own
+  label (they are not in the 1.6.1170 Address Library either), 11 raw RVAs that are not ids, and the unproven
+  RemoveAllItems id.
+- **A missing id stops the game, loudly.** If your plugin asks for an id the table does not have, the game stops
+  with a message naming the id, the file, its revision, and the revision your plugin declared it needs. If the id is
+  an absent record, the message says the id does not exist in 1.7.104 (removed or inlined by the game). Either way
+  it tells the user to report it to the plugin's author. It never returns a wrong address. A missing or damaged file, or a
+  file for another executable, stops the game with a message naming the file.
+- **Regenerate or extend it** with [tools/mit-idtable](tools/mit-idtable/README.md): map the id on the 1.7.104
+  executable, add a row with its RVA to a CSV, and build the file again. The tool refuses a row it cannot use,
+  an RVA outside the executable, and an id that two CSVs map differently. `check` proves a file matches its
+  executable and its CSV. The inputs of the published table are in `data/` (`idmap-1.7.104-fork-full.csv`,
+  `idmap-1.7.104-sync.csv` and `idmap-1.7.104-fixes.csv`), with the evidence for every row, so anyone can rebuild and audit it. The exact build
+  command is in the tool's README.
+
+### Distribution rules (one shared file)
+
+Every plugin on 1.7.104 reads the same file, and the copy a mod manager installed last wins. So:
+
+1. **One canonical table**, published as its own standalone download. Plugins list it as a requirement. A plugin
+   never bundles its own copy: an older bundled copy would overwrite a newer one and take ids away from every other
+   plugin.
+2. **Every published table is a strict superset of the one before it**, with a higher revision. No id is removed,
+   no RVA changes. `mit_idtable.py build --previous <last published file>` refuses anything else.
+3. **Your plugin declares the lowest revision it needs**, right after `SKSE::Init`:
+   `REL::IDDatabase::RequireMitTableRevision(1);`. On 1.7.104 an older table then stops the game at load with a
+   message naming both revisions. On other builds the call only records the value.
+
+The table in `data/` is revision 2.
+- On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
+  `GetDevice` and `GetVirtualKeyboard` handle that. The device number inside its input events is not verified.
+
+## Known 1.7.104 differences this fork does not handle yet
+
+The full mapping flagged these classes as changed on 1.7.104. Their declarations here are the 1.6.1170 ones, so a
+plugin that overrides or calls their virtual functions, or reads their members, on 1.7.104 is NOT safe yet:
+
+- Input handlers gained two virtual functions near the top of the table (slot 4 is slot 6 on 1.7.104):
+  `PlayerInputHandler` and its subclasses (Movement, Look, Sprint, ReadyWeapon, AutoMove, ToggleRun, Run, Jump,
+  Sneak, Shout, TogglePOV, Activate, AttackBlock, HeldState), `MenuEventHandler` and its subclasses (Click,
+  Direction, ConsoleOpen, MenuOpen, Favorites, Screenshot, QuickSaveLoad, the map handlers).
+- Camera states gained two virtual functions: `TESCameraState` subclasses (ThirdPerson, FirstPerson, Free, Dragon,
+  Horse, Bleedout).
+- Several menus' input-handler bases (Cursor, Favorites, Lockpicking, Mist, RaceSex, Stats, Journal, ModManager),
+  `Inventory3DManager`, `BSGamerProfile`, `BSSystemUtility` and `BSSaveDataSystemUtility`.
+- `SkyrimVM` gained two event-sink bases (Amiibo events), so its sink subobjects move.
+
+The full list, with the evidence, is in `data/summary-1.7.104-fork-full.md` ("layout flags").
+
+## Source-breaking changes and migration
+
+These changes stop code that compiled against 3.7.0 from compiling, on purpose: the old member was at the wrong
+offset on some verified build, and a compile error is better than a wrong read.
+
+| 3.7.0 | this fork | why |
+|---|---|---|
+| `ControlMap` members after `controlMap[]` (`enabledControls`, `contextPriorityStack`, ...) | `GetRuntimeData().<member>`; contexts through `GetInputContext(id)` | they move by 8 on 1.6.1170 and 1.7.104 |
+| `CombatController` members from +0x68 (`cachedTarget`, `handleCount`, ...) | `GetRuntimeData().<member>` | they move by 8 on 1.6.1170 and 1.7.104 |
+| `CombatMagicCaster::GetMagicTarget` returning `void*` | returns `MagicTarget` (`{handle, actor}`) | the game returns 16 bytes through a hidden out-slot |
+| `ControlMap::ToggleControls(flags, enable)` | gains `storeState` (default `true`) | it calls the game's own function now |
+| `BSInputEventQueue::buttonEvents`, `charEvents`, `mouseEvents`, `thumbstickEvents`, `connectEvents`, `kinectEvents`, `queueHead`, `queueTail` | `GetButtonEvents()`, `GetCharEvents()`, `GetMouseEvents()`, `GetThumbstickEvents()`, `GetConnectEvents()`, `GetKinectEvents()`, `GetQueueHead()`, `GetQueueTail()` | they move on 1.7.104 |
+
+Not a compile error, but wrong on 1.7.104 if used directly:
+
+- `BSInputDeviceManager::devices[4]`: use `GetDevice(INPUT_DEVICE)`. 1.7.104 has six slots and the virtual keyboard
+  in slot 5, so `devices[kVirtualKeyboard]` is empty there.
+- In a build with VR disabled, `BSInputDeviceManager` also declares its runtime members (`pollingEnabled`,
+  `remoteGamepadEventSource`, ...) inline at +0x80. On 1.7.104 they sit at +0x90. Use `GetRuntimeData()`, which is
+  right on every build.
+- `BGSDefaultObjectManager::objects[i]` read directly is only right below index 188 on every verified build. Use
+  `GetObject`.
+- Fields of `PlayerCharacter` that a single-runtime build declares inline are only right for that runtime. Use the
+  accessors (`GetPlayerRuntimeData()` and the others).
+
+---
+
+# Upstream CommonLibSSE-NG 3.7.0 documentation
+
+The rest of this page is the 3.7.0 README, unchanged. Where it names releases, CI or package feeds, those are
+CharmedBaryon's, not this fork's.
 
 ## New Features
 ### Multiple Runtime Targets

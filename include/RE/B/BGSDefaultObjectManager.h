@@ -1027,13 +1027,23 @@ namespace RE
 		//             0x1FD8F50).
 		//   1.5.97:   364 objects at +0x20, init flags at +0xB80 (memset 0xCCC at
 		//             0x2C0820; InitItemImpl 0x2C0A9B lea rdi,[rcx+0xB80], count 0x16C).
+		//   1.7.104:  372 objects at +0x20, init flags at +0xBC0 (ctor 0x31B830 memset
+		//             0xD14 = 372 * 9 at 0x31B870; InitItemImpl 0x31BB06 lea rdi,[rcx+0xBC0],
+		//             special index 0x172 at 0x31BB18 where 1.6.1170 has 0x16C; the six
+		//             engine flag reads cmp byte [..+0xB90] on 1.6.1170 at 0x14EEF2, 0x41726A,
+		//             0x488A69, 0x6E069D, 0x915A73, 0x96FEFB read +0xBC0 on 1.7.104 at
+		//             0x154482, 0x41E5EA, 0x48FF89, 0x6F324D, 0x92BD63, 0x9872FB). Data table
+		//             0x207BF40 (372 x 0x18) against 1.6.1170's 0x1FD8F50 (366 x 0x18):
+		//             1.7.104 inserts HMNX at 188 and HMAB/HMBA/HMMA/HMLP/HAMI at 1.6.1170's 263.
 		// Any other build (VR included) is refused: the accessors return nullptr /
 		// false and log one critical line naming the game version. No guessing.
 		//
 		// The DEFAULT_OBJECT and DefaultObjectID enums are numbered as on 1.5.97. The
 		// enum overloads translate to the running build's index (kModsHelpFormList
-		// 363 -> 365 on 1.6.1170). The std::size_t overloads take the running build's
-		// own engine index and are bounds-checked against its count.
+		// 363 -> 365 on 1.6.1170; on 1.7.104 188..262 -> +1, 263..362 -> +6, 363 -> 371).
+		// The std::size_t overloads take the running build's own engine index and are
+		// bounds-checked against its count. Reading objects[] directly is only right
+		// below index 188 on every verified build.
 
 		[[nodiscard]] TESForm* GetObject(DefaultObject a_object) const noexcept { return GetObject(GetRuntimeIndex(std::to_underlying(a_object))); }
 
@@ -1073,7 +1083,7 @@ namespace RE
 
 		[[nodiscard]] bool IsObjectInitialized(std::size_t a_idx) const noexcept;
 
-		// mit-3.7: the running build's object count (366 on 1.6.1170, 364 on 1.5.97),
+		// mit-3.7: the running build's object count (366 on 1.6.1170, 364 on 1.5.97, 372 on 1.7.104),
 		// or 0 on a build whose layout is not verified (logged once, critical).
 		[[nodiscard]] static std::size_t GetRuntimeObjectCount() noexcept;
 
@@ -1104,7 +1114,7 @@ namespace RE
 		// members
 		TESForm* objects[DEFAULT_OBJECTS::kTotal];  // 020 - DNAM
 #ifndef SKYRIM_CROSS_VR
-		bool          objectInit[DEFAULT_OBJECTS::kTotal];  // B80 on 1.5.97 only; B90 on 1.6.1170 (use IsObjectInitialized)
+		bool          objectInit[DEFAULT_OBJECTS::kTotal];  // B80 on 1.5.97 only; B90 on 1.6.1170, BC0 on 1.7.104 (use IsObjectInitialized)
 		std::uint32_t padCEC;                               // CEC
 #else
 		std::uint8_t unk5D8[0x718];  // 5D8

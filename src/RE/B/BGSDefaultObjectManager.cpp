@@ -39,17 +39,21 @@ namespace RE
 		{
 			static constexpr Layout kAE1170{ 366, 0xB90 };
 			static constexpr Layout kSE197{ 364, 0xB80 };
+			static constexpr Layout k17104{ 372, 0xBC0 };
 			if (Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170)) {
 				return std::addressof(kAE1170);
 			}
 			if (Module::IsExactly(SKSE::RUNTIME_SSE_1_5_97)) {
 				return std::addressof(kSE197);
 			}
+			if (Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104)) {
+				return std::addressof(k17104);
+			}
 			static std::atomic_flag reported = ATOMIC_FLAG_INIT;
 			if (!reported.test_and_set()) {
 				SKSE::log::critical(
 					"BGSDefaultObjectManager: the object/flag layout is not verified for game version {} "
-					"(verified: 1.6.1170.0, 1.5.97.0). Every GetObject / IsObjectInitialized call is REFUSED "
+					"(verified: 1.6.1170.0, 1.5.97.0, 1.7.104.0). Every GetObject / IsObjectInitialized call is REFUSED "
 					"and returns nullptr / false.",
 					Module::get().version().string("."));
 			}
@@ -76,6 +80,20 @@ namespace RE
 		static_assert(kSEModsHelpFormList == 363);
 		if (a_seIndex == kSEModsHelpFormList && Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170)) {
 			return 365;
+		}
+		// 1.7.104 inserted HMNX at 188 and HMAB, HMBA, HMMA, HMLP, HAMI at 1.6.1170's 263, on
+		// top of 1.6.1170's HMCC and HMAE (see the header). So from the 1.5.97 numbering:
+		// 0..187 stay, 188..262 move by 1, 263..362 move by 6, and 363 (MHFL) is 371.
+		if (Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104)) {
+			if (a_seIndex == kSEModsHelpFormList) {
+				return 371;
+			}
+			if (a_seIndex >= 263 && a_seIndex < kSEModsHelpFormList) {
+				return a_seIndex + 6;
+			}
+			if (a_seIndex >= 188 && a_seIndex < 263) {
+				return a_seIndex + 1;
+			}
 		}
 		return a_seIndex;
 	}

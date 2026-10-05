@@ -81,12 +81,17 @@ namespace REL
 
 		[[nodiscard]] static Module &get()
 		{
-			if (_initialized.load(std::memory_order_relaxed)) {
+			// mit-3.7: double-checked. Upstream re-ran init() for every thread that had
+			// queued on the lock while the first one initialized, rewriting the instance
+			// under readers. Acquire pairs with the release below.
+			if (_initialized.load(std::memory_order_acquire)) {
 				return _instance;
 			}
 			[[maybe_unused]] std::unique_lock lock(_initLock);
-			_instance.init();
-			_initialized = true;
+			if (!_initialized.load(std::memory_order_relaxed)) {
+				_instance.init();
+				_initialized.store(true, std::memory_order_release);
+			}
 			return _instance;
 		}
 
@@ -169,6 +174,7 @@ namespace REL
 						_instance._runtime = Runtime::VR;
 						break;
 					case 6:
+					case 7:  // mit-3.7: 1.7.x continues the AE id column (see load_version)
 						_instance._runtime = Runtime::AE;
 						break;
 					default:
@@ -353,6 +359,15 @@ namespace REL
 						_runtime = Runtime::VR;
 						break;
 					case 6:
+					// mit-3.7: 1.7.x is filed with AE, not SE. Upstream let every minor that is not
+					// 4 or 6 fall to the SE default, so 1.7.104 picked the SE id of every
+					// RELOCATION_ID. 1.7.x continues the AE id column (every AE id the 1.7.104 id
+					// table maps is the same function or object as on 1.6.1170, proven per row by
+					// disassembly), and its struct layouts descend from 1.6.x, not 1.5.x. AE is a
+					// BUCKET: layouts that differ on 1.7.104 are chosen with
+					// IsExactly(SKSE::RUNTIME_SSE_1_7_104), and IDDatabase refuses every 1.7.x build
+					// other than 1.7.104.0 at load, so no unverified 1.7 build ever runs on AE values.
+					case 7:
 						_runtime = Runtime::AE;
 						break;
 					default:
