@@ -1117,7 +1117,7 @@ namespace REL {
                                     "This game version gets its ids from that file, not from the Address Library. "
                                     "The table does not cover every id yet, and this plugin needs one it does not have. "
                                     "No address was guessed. Map the id on this exact executable, add it to the table "
-                                    "(tools/mit-idtable in the mit-3.7 CommonLibSSE-NG fork), and rebuild the file."sv,
+                                    "(tools/mit-idtable in github.com/marthofdoom/CommonLibSSE-NG), and rebuild the file."sv,
                                     a_id, _mitTablePath, Module::get().version().string(".")));
                 }
                 stl::report_and_fail(

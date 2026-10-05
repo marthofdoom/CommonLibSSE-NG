@@ -1,6 +1,6 @@
 # MIT id table, format 1
 
-This is the file the mit-3.7 fork reads on Skyrim SE **1.7.104.0** in place of the Nexus Address Library.
+This is the file the MIT CommonLibSSE-NG 3.7.0 line (github.com/marthofdoom/CommonLibSSE-NG, branch `main`) reads on Skyrim SE **1.7.104.0** in place of the Nexus Address Library.
 It maps Address Library ids (the AE id column, the same ids `RELOCATION_ID(se, ae)` and `REL::VariantID`
 already name) to RVAs in one exact game executable.
 
@@ -16,7 +16,7 @@ Data/SKSE/Plugins/mit-idtable-<major>-<minor>-<patch>-<build>.bin
 For 1.7.104.0 that is `Data/SKSE/Plugins/mit-idtable-1-7-104-0.bin`. The version in the name is the game
 executable's ProductVersion, the same string the Address Library file names use.
 
-The fork only reads this file on exactly 1.7.104.0. Every other build keeps its usual source (the Nexus
+The fork (github.com/marthofdoom/CommonLibSSE-NG, branch `main`) only reads this file on exactly 1.7.104.0. Every other build keeps its usual source (the Nexus
 Address Library on 1.5.97 and 1.6.x, the VR CSV on VR). Any other 1.7.x build is refused at load with a
 message, because nothing in the fork is verified for it.
 

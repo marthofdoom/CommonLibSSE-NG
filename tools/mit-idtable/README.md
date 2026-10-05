@@ -1,6 +1,6 @@
 # mit_idtable.py
 
-Builds, checks and dumps MIT id table files, the id source the mit-3.7 fork reads on Skyrim SE 1.7.104.0.
+Builds, checks and dumps MIT id table files, the id source the MIT CommonLibSSE-NG 3.7.0 line (this repository, branch `main`) reads on Skyrim SE 1.7.104.0.
 The file format is in [docs/MIT-ID-TABLE-FORMAT.md](../../docs/MIT-ID-TABLE-FORMAT.md).
 
 Needs Python 3.8 or newer and `pefile` (`pip install pefile`), which is only used to read the executable's
