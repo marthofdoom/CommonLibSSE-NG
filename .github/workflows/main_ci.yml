@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  VCPKG_COMMIT_ID: fc3f61366102c1f0d4547c06d03c523bb18c13a7
+  VCPKG_COMMIT_ID: 19780d9cdf84d0944cf9a318666703b89ab6629c
 
 jobs:
   build-and-test-vcpkg:
@@ -48,13 +48,13 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1.10.0
 
       - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v10.0
+        uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: true
 
       - name: Build
-        uses: lukka/run-cmake@v10.0
+        uses: lukka/run-cmake@v10.9
         with:
           cmakeListsTxtPath: ${{ github.workspace }}/main/CMakeLists.txt
           configurePreset: build-${{ matrix.build-type }}-${{ matrix.compiler }}-vcpkg-${{ matrix.runtime }}
@@ -92,13 +92,37 @@ jobs:
 
       - name: Install Conan
         uses: turtlebrowser/get-conan@main
+        with:
+          version: 1.66.0
+
+      - name: Detect Conan profile
+        shell: bash
+        run: |
+          conan profile new default --detect --force
+          # Conan 1.x does not know the VS 2026 toolset and the runner's PATH makes detection pick the MinGW gcc; conanfile.py
+          # only accepts the 'Visual Studio' compiler. The CMake generator is Ninja so version 17 is only a settings label.
+          cat > "$(conan config home)/profiles/default" <<'EOF'
+          [settings]
+          os=Windows
+          arch=x86_64
+          build_type=Release
+          compiler=Visual Studio
+          compiler.version=17
+          compiler.runtime=MD
+          [options]
+          [build_requires]
+          [env]
+          [conf]
+          tools.cmake.cmaketoolchain:generator=Ninja
+          EOF
+          conan profile show default
 
       - name: Run Conan
         working-directory: ${{ github.workspace }}/main
         run: conan install --build=missing -o commonlibsse-ng:testing=True .
 
       - name: Build with CMake
-        uses: lukka/run-cmake@v10.0
+        uses: lukka/run-cmake@v10.9
         with:
           cmakeListsTxtPath: ${{ github.workspace }}/main/CMakeLists.txt
           configurePreset: build-${{ matrix.build-type }}-${{ matrix.compiler }}-conan-${{ matrix.runtime }}
