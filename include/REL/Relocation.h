@@ -1107,7 +1107,7 @@ namespace REL {
             // (whose caption is this plugin's file name) and the process stops.
             // No fallback, no guess (CLAUDE.md principle 7).
             if (it == _id2offset.end() || it->id != a_id) {
-                if (!_mitTablePath.empty()) {
+                if (_mitTableActive) {
                     // mit-3.7: the id source on this build is our own id table, which does not
                     // cover the whole id space yet. Say so, so the plugin author knows which id
                     // to map and where it has to go.
@@ -1118,7 +1118,7 @@ namespace REL {
                                     "The table does not cover every id yet, and this plugin needs one it does not have. "
                                     "No address was guessed. Map the id on this exact executable, add it to the table "
                                     "(tools/mit-idtable in github.com/marthofdoom/CommonLibSSE-NG), and rebuild the file."sv,
-                                    a_id, _mitTablePath, Module::get().version().string(".")));
+                                    a_id, mit_table_path(Module::get().version()), Module::get().version().string(".")));
                 }
                 stl::report_and_fail(
                         fmt::format(
@@ -1342,7 +1342,7 @@ namespace REL {
                                 a_version.string(".")));
             }
 
-            const auto path = fmt::format("Data/SKSE/Plugins/mit-idtable-{}.bin"sv, a_version.string());
+            const auto path = mit_table_path(a_version);
             const auto fail = [&](std::string_view a_why) {
                 stl::report_and_fail(
                         fmt::format(
@@ -1439,7 +1439,7 @@ namespace REL {
                             "game: {:08X}, {:X}). The same version number can be two different builds"sv,
                             a_version.string("."), u32at(24), u32at(28), timeDateStamp, sizeOfImage));
                 }
-                _mitTable.resize(count);
+                _mitTable = std::make_unique<mapping_t[]>(count);
                 std::uint64_t prev = 0;
                 for (std::size_t i = 0; i < count; ++i) {
                     const auto id = u64at(headerSize + recordSize * i);
@@ -1455,8 +1455,12 @@ namespace REL {
                 }
             }
 
-            _mitTablePath = path;
-            _id2offset = { _mitTable.data(), _mitTable.size() };
+            _mitTableActive = true;
+            _id2offset = { _mitTable.get(), count };
+        }
+
+        [[nodiscard]] static std::string mit_table_path(Version a_version) {
+            return fmt::format("Data/SKSE/Plugins/mit-idtable-{}.bin"sv, a_version.string());
         }
 
         bool load_csv(stl::zwstring a_filename, Version a_version, bool a_failOnError) {
@@ -1591,8 +1595,8 @@ namespace REL {
         void clear() {
             _mmap.close();
             _id2offset = {};
-            _mitTable.clear();
-            _mitTablePath.clear();
+            _mitTable.reset();
+            _mitTableActive = false;
         }
 
         static IDDatabase _instance;
@@ -1600,8 +1604,11 @@ namespace REL {
         static inline std::mutex _initLock;
         detail::memory_map _mmap;
         std::span<mapping_t> _id2offset;
-        std::vector<mapping_t> _mitTable;  // mit-3.7: 1.7.104 id table, private to this DLL (load_mit_table)
-        std::string _mitTablePath;         // mit-3.7: its path when it is the id source, for error messages
+        // mit-3.7: the 1.7.104 id table, private to this DLL (load_mit_table). Both members are
+        // constant-initialized (no dynamic initializer for _instance, as before), so a lookup
+        // during another TU's static initialization cannot be undone by a late constructor.
+        std::unique_ptr<mapping_t[]> _mitTable;
+        bool _mitTableActive{false};
     };
 
     class Offset {
