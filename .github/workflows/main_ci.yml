@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  VCPKG_COMMIT_ID: fc3f61366102c1f0d4547c06d03c523bb18c13a7
+  VCPKG_COMMIT_ID: 19780d9cdf84d0944cf9a318666703b89ab6629c
 
 jobs:
   build-and-test-vcpkg:
@@ -102,6 +102,7 @@ jobs:
           # Conan 1.x does not know the VS 2026 toolset (it detects 'Visual Studio 15'); the CMake generator is Ninja so the msvc 193 setting is only a label.
           conan profile update settings.compiler="msvc" default
           conan profile update settings.compiler.version=193 default
+          conan profile remove settings.compiler.libcxx default
           conan profile update settings.compiler.runtime=dynamic default
           conan profile update settings.compiler.runtime_type=Release default
           conan profile update settings.compiler.cppstd=20 default
