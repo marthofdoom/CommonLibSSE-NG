@@ -740,6 +740,7 @@ namespace REL {
                         _instance._runtime = Runtime::VR;
                         break;
                     case 6:
+                    case 7:  // mit-3.7: 1.7.x continues the AE id column (see load_version)
                         _instance._runtime = Runtime::AE;
                         break;
                     default:
@@ -917,6 +918,15 @@ namespace REL {
                         _runtime = Runtime::VR;
                         break;
                     case 6:
+                    // mit-3.7: 1.7.x is filed with AE, not SE. Upstream let every minor that is not
+                    // 4 or 6 fall to the SE default, so 1.7.104 picked the SE id of every
+                    // RELOCATION_ID. 1.7.x continues the AE id column (every AE id the 1.7.104 id
+                    // table maps is the same function or object as on 1.6.1170, proven per row by
+                    // disassembly), and its struct layouts descend from 1.6.x, not 1.5.x. AE is a
+                    // BUCKET: layouts that differ on 1.7.104 are chosen with
+                    // IsExactly(SKSE::RUNTIME_SSE_1_7_104), and IDDatabase refuses every 1.7.x build
+                    // other than 1.7.104.0 at load, so no unverified 1.7 build ever runs on AE values.
+                    case 7:
                         _runtime = Runtime::AE;
                         break;
                     default:
@@ -1097,6 +1107,19 @@ namespace REL {
             // (whose caption is this plugin's file name) and the process stops.
             // No fallback, no guess (CLAUDE.md principle 7).
             if (it == _id2offset.end() || it->id != a_id) {
+                if (!_mitTablePath.empty()) {
+                    // mit-3.7: the id source on this build is our own id table, which does not
+                    // cover the whole id space yet. Say so, so the plugin author knows which id
+                    // to map and where it has to go.
+                    stl::report_and_fail(
+                            fmt::format(
+                                    "Address Library id {} is not in the id table {} (game version {}).\n"
+                                    "This game version gets its ids from that file, not from the Address Library. "
+                                    "The table does not cover every id yet, and this plugin needs one it does not have. "
+                                    "No address was guessed. Map the id on this exact executable, add it to the table "
+                                    "(tools/mit-idtable in the mit-3.7 CommonLibSSE-NG fork), and rebuild the file."sv,
+                                    a_id, _mitTablePath, Module::get().version().string(".")));
+                }
                 stl::report_and_fail(
                         fmt::format(
                                 "Failed to find the id within the address library: {} (game version {})\n"
@@ -1229,6 +1252,13 @@ namespace REL {
 
         void load() {
             const auto version = Module::get().version();
+            // mit-3.7: 1.7.x never reads the Nexus Address Library. 1.7.104.0 reads our own id
+            // table into a private buffer (load_mit_table). Any other 1.7.x is refused here, before
+            // a single id or layout is used, because nothing in this library is verified for it.
+            if (version[0] == 1 && version[1] == 7) {
+                load_mit_table(version);
+                return;
+            }
             if SKYRIM_REL_CONSTEXPR (Module::IsVR()) {
                 const auto filename =
                         stl::utf8_to_utf16(
@@ -1288,6 +1318,145 @@ namespace REL {
                 return false;
             }
             return true;
+        }
+
+        /**
+         * mit-3.7: loads the MIT id table (docs/MIT-ID-TABLE-FORMAT.md, format 1) for 1.7.104.0.
+         *
+         * The file is read whole into memory, checked against every rule in the format note, and
+         * its records are copied into _mitTable, a buffer this DLL owns. It is never placed in the
+         * shared, writable CommonLibSSEOffsets-v2 mapping that load_file uses, so no other plugin
+         * can change what this one reads, and this one changes nothing for anyone else.
+         *
+         * The header binds the file to one exact executable: version, module name, and the PE
+         * TimeDateStamp and SizeOfImage read from the running image's own headers. Every failure
+         * stops the game with a message naming the file. Nothing falls back to another source.
+         */
+        void load_mit_table(Version a_version) {
+            if (a_version != Version(1, 7, 104, 0)) {
+                stl::report_and_fail(
+                        fmt::format(
+                                "Skyrim {} is not supported by this build of CommonLibSSE-NG (mit-3.7).\n"
+                                "Of the 1.7 versions, only 1.7.104.0 is verified, and only it has an id table. "
+                                "No address library was loaded and no address was guessed."sv,
+                                a_version.string(".")));
+            }
+
+            const auto path = fmt::format("Data/SKSE/Plugins/mit-idtable-{}.bin"sv, a_version.string());
+            const auto fail = [&](std::string_view a_why) {
+                stl::report_and_fail(
+                        fmt::format(
+                                "The id table {} cannot be used: {}.\n"
+                                "On Skyrim {} this plugin reads its addresses from that file (not from the Address "
+                                "Library). Install the matching id table, or update it."sv,
+                                path, a_why, a_version.string(".")));
+            };
+
+            std::vector<std::uint8_t> data;
+            {
+                std::ifstream in(path, std::ios::in | std::ios::binary);
+                if (!in.is_open()) {
+                    fail("the file is missing or cannot be opened"sv);
+                }
+                in.seekg(0, std::ios::end);
+                const auto size = static_cast<std::streamoff>(in.tellg());
+                if (size < 0 || size > static_cast<std::streamoff>(256u * 1024u * 1024u)) {
+                    fail("its size cannot be read, or is over 256 MB"sv);
+                }
+                data.resize(static_cast<std::size_t>(size));
+                in.seekg(0, std::ios::beg);
+                if (!data.empty() && !in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()))) {
+                    fail("reading it failed"sv);
+                }
+            }
+
+            constexpr std::size_t headerSize = 64;
+            constexpr std::size_t recordSize = 16;
+            constexpr std::size_t trailerSize = 8;
+            const auto u16at = [&](std::size_t a_off) { std::uint16_t v; std::memcpy(&v, data.data() + a_off, sizeof(v)); return v; };
+            const auto u32at = [&](std::size_t a_off) { std::uint32_t v; std::memcpy(&v, data.data() + a_off, sizeof(v)); return v; };
+            const auto u64at = [&](std::size_t a_off) { std::uint64_t v; std::memcpy(&v, data.data() + a_off, sizeof(v)); return v; };
+
+            if (data.size() < headerSize + trailerSize) {
+                fail(fmt::format("it is {} bytes, smaller than a header and a checksum"sv, data.size()));
+            }
+            if (std::memcmp(data.data(), "MITIDTAB", 8) != 0) {
+                fail("it is not an MIT id table (bad magic)"sv);
+            }
+            if (const auto fmtVersion = u32at(8); fmtVersion != 1) {
+                fail(fmt::format("it is format {}, this library reads format 1"sv, fmtVersion));
+            }
+            if (u32at(12) != headerSize || u32at(36) != recordSize || u32at(40) != 0 || u32at(44) != 0) {
+                fail("its header sizes or reserved fields are not the format-1 values"sv);
+            }
+            const std::size_t count = u32at(32);
+            if (data.size() != headerSize + recordSize * count + trailerSize) {
+                fail(fmt::format("it is {} bytes, but {} records need exactly {}"sv,
+                                 data.size(), count, headerSize + recordSize * count + trailerSize));
+            }
+            {
+                std::uint64_t hash = 0xCBF29CE484222325ull;
+                for (std::size_t i = 0; i < data.size() - trailerSize; ++i) {
+                    hash ^= data[i];
+                    hash *= 0x100000001B3ull;
+                }
+                if (hash != u64at(data.size() - trailerSize)) {
+                    fail("its checksum does not match (the file is damaged)"sv);
+                }
+            }
+            const Version fileVersion(u16at(16), u16at(18), u16at(20), u16at(22));
+            if (fileVersion != a_version) {
+                fail(fmt::format("it is for game version {}"sv, fileVersion.string(".")));
+            }
+            {
+                char name[17]{};
+                std::memcpy(name, data.data() + 48, 16);
+                const auto exe = stl::utf16_to_utf8(Module::get().filename()).value_or(""s);
+                const std::string_view want(name);
+                if (exe.size() != want.size() ||
+                    !std::equal(exe.begin(), exe.end(), want.begin(), [](char a_l, char a_r) {
+                        const auto lower = [](char a_c) { return (a_c >= 'A' && a_c <= 'Z') ? static_cast<char>(a_c - 'A' + 'a') : a_c; };
+                        return lower(a_l) == lower(a_r);
+                    })) {
+                    fail(fmt::format("it is for {}, the game is {}"sv, want, exe));
+                }
+            }
+            {
+                // The running image's own PE headers (mapped at the module base).
+                const auto base = reinterpret_cast<const std::uint8_t*>(Module::get().base());
+                std::uint32_t peOffset;
+                std::memcpy(&peOffset, base + 0x3C, sizeof(peOffset));
+                std::uint32_t signature, timeDateStamp, sizeOfImage;
+                std::memcpy(&signature, base + peOffset, sizeof(signature));
+                std::memcpy(&timeDateStamp, base + peOffset + 8, sizeof(timeDateStamp));
+                std::memcpy(&sizeOfImage, base + peOffset + 24 + 56, sizeof(sizeOfImage));
+                if (signature != 0x00004550u) {
+                    fail("the game executable's PE header could not be read"sv);
+                }
+                if (timeDateStamp != u32at(24) || sizeOfImage != u32at(28)) {
+                    fail(fmt::format(
+                            "it was built from a different {} executable (file: TimeDateStamp {:08X}, SizeOfImage {:X}; "
+                            "game: {:08X}, {:X}). The same version number can be two different builds"sv,
+                            a_version.string("."), u32at(24), u32at(28), timeDateStamp, sizeOfImage));
+                }
+                _mitTable.resize(count);
+                std::uint64_t prev = 0;
+                for (std::size_t i = 0; i < count; ++i) {
+                    const auto id = u64at(headerSize + recordSize * i);
+                    const auto rva = u64at(headerSize + recordSize * i + 8);
+                    if (i != 0 && id <= prev) {
+                        fail(fmt::format("its records are not strictly sorted by id (id {} after {})"sv, id, prev));
+                    }
+                    if (rva == 0 || rva >= sizeOfImage) {
+                        fail(fmt::format("id {} has RVA {:X}, outside the executable"sv, id, rva));
+                    }
+                    _mitTable[i] = { id, rva };
+                    prev = id;
+                }
+            }
+
+            _mitTablePath = path;
+            _id2offset = { _mitTable.data(), _mitTable.size() };
         }
 
         bool load_csv(stl::zwstring a_filename, Version a_version, bool a_failOnError) {
@@ -1422,6 +1591,8 @@ namespace REL {
         void clear() {
             _mmap.close();
             _id2offset = {};
+            _mitTable.clear();
+            _mitTablePath.clear();
         }
 
         static IDDatabase _instance;
@@ -1429,6 +1600,8 @@ namespace REL {
         static inline std::mutex _initLock;
         detail::memory_map _mmap;
         std::span<mapping_t> _id2offset;
+        std::vector<mapping_t> _mitTable;  // mit-3.7: 1.7.104 id table, private to this DLL (load_mit_table)
+        std::string _mitTablePath;         // mit-3.7: its path when it is the id source, for error messages
     };
 
     class Offset {
