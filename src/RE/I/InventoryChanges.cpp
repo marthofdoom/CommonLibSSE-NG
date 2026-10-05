@@ -91,11 +91,11 @@ namespace RE
 	void InventoryChanges::RemoveAllItems(TESObjectREFR* a_ref, TESObjectREFR* a_moveToRef, bool a_arg4, bool a_keepOwnership, bool a_arg6)
 	{
 		using func_t = decltype(&InventoryChanges::RemoveAllItems);
-		// mit-3.7: UNRESOLVED upstream id. AE 16118 was retired (it exists only in Address Libraries up to
-		// 1.6.659) and its current id is not proven: no function among the ids new in 1.6.1130+ matches the
-		// 1.5.97 body (SE 15878). On 1.6.1170 and 1.7.104 this lookup stops the game with the id named. Do not
-		// call it there until the id is mapped.
-		REL::Relocation<func_t> func{ RELOCATION_ID(15878, 16118) };
+		// mit-3.7: AE id was 16118, retired (only in libraries up to 1.6.659). 441567 is its id from 1.6.1130 on.
+		// From 1.6.1130 the function is a 164-byte entry (same 6 arguments) that calls the two halves of the old
+		// body. All 4 1.6.1170 callers whose 1.5.97 twins call SE 15878 call 1.6.1170 0x234640 at the same call
+		// site (data/idmap-1.7.104-fixes.csv).
+		REL::Relocation<func_t> func{ RELOCATION_ID(15878, 441567) };
 		return func(this, a_ref, a_moveToRef, a_arg4, a_keepOwnership, a_arg6);
 	}
 

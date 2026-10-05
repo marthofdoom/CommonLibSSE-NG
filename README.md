@@ -202,9 +202,10 @@ here, the same as in 3.7.0. Nothing defines that macro in an NG build.
   - Four AE ids were retired after 1.6.659 and do not exist in the 1.6.1130, 1.6.1170 or 1.6.1179 libraries:
     `GetCachedString` 69188 is now 443410, `Set_CStr` 11044 is now 439876, `SelectedRef` 405935 is now 504099,
     `CompileAndRun` 21890 is now 441582. After the sync, `BSScaleformExternalTexture::ReleaseTexture` 82317 is now
-    443440. With F1 a lookup of the old ids already stopped the game. Now they work.
-  - `InventoryChanges::RemoveAllItems` (AE 16118) is retired the same way, and its current id is NOT proven yet.
-    It keeps 16118 with a loud comment, so a call still stops the game with the id named on 1.6.1170 and 1.7.104.
+    443440, and `InventoryChanges::RemoveAllItems` 16118 is now 441567. With F1 a lookup of the old ids already stopped the game. Now they work.
+  - `InventoryChanges::RemoveAllItems` 16118 is now 441567. From 1.6.1130 the game split the function: 441567 is a
+    short entry with the same six arguments that calls the two halves of the old body, which is why body
+    matching missed it. All four callers that have a twin in 1.5.97 call it at the same call site.
   - `VTABLE_std__bad_weak_ptr` (248775) has no vtable in any executable. It is kept so code still compiles, and is
     documented as absent.
 - The id table can mark an id as absent (known not to exist in that game version), and a lookup says so.
@@ -228,16 +229,16 @@ I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork reads
   different build with different addresses.
 - **Private.** Each plugin reads the file into its own memory. Nothing is shared between plugins, and nothing goes
   into the shared mapping the Address Library path uses.
-- **Coverage today (revision 2): every id this fork names.** 17,750 records: **16,501 mapped** (630 functions,
+- **Coverage today (revision 3): every id this fork names.** 17,751 records: **16,502 mapped** (631 functions,
   125 globals, 410 NiRTTI objects, 8,016 vtables, 7,320 RTTI type descriptors) and **1,249 absent** ids that do not
   exist in 1.7.104 (1,247 retired or removed classes, 1 constructor the game inlined, 1 vtable no executable has).
-  Revision 2 adds the 58 ids the upstream sync brought in and the corrected ReleaseTexture id. Each mapped id was
+  Revision 2 added the 58 ids the upstream sync brought in and the corrected ReleaseTexture id. Revision 3 adds
+  the corrected RemoveAllItems id. Each mapped id was
   carried from its 1.6.1170 address to 1.7.104 by disassembly, with its evidence and a crosscheck: by exact RTTI or
   import name, by a function signature that occurs once in each executable, or through callers, callees and data
   references already mapped. The mapper got 107 of 107 known pairs right, and every precision self-test came out 0
   wrong (`data/selftest-1.7.104-fork-full.md`). Left out on purpose: 25 ids whose only meaning is the fork's own
-  label (they are not in the 1.6.1170 Address Library either), 11 raw RVAs that are not ids, and the unproven
-  RemoveAllItems id.
+  label (they are not in the 1.6.1170 Address Library either) and 11 raw RVAs that are not ids.
 - **A missing id stops the game, loudly.** If your plugin asks for an id the table does not have, the game stops
   with a message naming the id, the file, its revision, and the revision your plugin declared it needs. If the id is
   an absent record, the message says the id does not exist in 1.7.104 (removed or inlined by the game). Either way
@@ -263,7 +264,7 @@ Every plugin on 1.7.104 reads the same file, and the copy a mod manager installe
    `REL::IDDatabase::RequireMitTableRevision(1);`. On 1.7.104 an older table then stops the game at load with a
    message naming both revisions. On other builds the call only records the value.
 
-The table in `data/` is revision 2.
+The table in `data/` is revision 3.
 - On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
   `GetDevice` and `GetVirtualKeyboard` handle that. The device number inside its input events is not verified.
 

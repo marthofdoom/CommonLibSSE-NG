@@ -26,12 +26,12 @@ python3 tools/mit-idtable/mit_idtable.py build \
     --where confidence=EXACT,UNIQUE-SIG,XREF \
     --where crosscheck=pass,na \
     --absent-where final_state=REMOVED,INLINED,ABSENT \
-    --revision 2 --previous <revision 1 file> \
+    --revision 3 --previous <revision 2 file> \
     --out Data/SKSE/Plugins/
 ```
 
-This writes `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revision 2). It is exactly the table in
-`data/`. Without the sync CSV and with `--revision 1` it gives revision 1.
+This writes `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revision 3). It is exactly the table in
+`data/`. Revisions 1 and 2 were built from fewer rows (see the README changelog).
 
 - `--where COL=A,B` keeps a row only when COL is one of the listed values. Give it several times and every one
   must hold. Rows that pass the filters must have a numeric id and an RVA, or the build stops and names the row.
@@ -51,7 +51,7 @@ This writes `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revisi
   executable you pass is named differently (for example a renamed copy), since the fork compares the name.
 - After writing, the tool reads its own output back under the same rules the fork applies.
 
-### What the published table holds (revision 2)
+### What the published table holds (revision 3)
 
 The inputs are committed in `data/` with their evidence, so anyone can rebuild and audit them:
 
@@ -60,19 +60,18 @@ The inputs are committed in `data/` with their evidence, so anyone can rebuild a
   report: ground truth 107 of 107, every precision self-test 0 wrong.
 - `idmap-1.7.104-sync.csv` and `summary-1.7.104-sync.md`: the 60 ids the upstream sync 2024-09 added, mapped the
   same way (58 mapped, 2 retired ids).
-- `idmap-1.7.104-fixes.csv`: five fork ids that were retired from the AE column and their current ids
-  (443410, 439876, 441582, 504099, 443440, each with its evidence), and `VTABLE_std__bad_weak_ptr` (248775) recorded
+- `idmap-1.7.104-fixes.csv`: six fork ids that were retired from the AE column and their current ids
+  (443410, 439876, 441582, 504099, 443440, 441567, each with its evidence), and `VTABLE_std__bad_weak_ptr` (248775) recorded
   as absent.
 
-The build above gives 17,750 records: **16,501 mapped** and **1,249 absent** (1,247 ids REMOVED, 1 INLINED, 1 with no
+The build above gives 17,751 records: **16,502 mapped** and **1,249 absent** (1,247 ids REMOVED, 1 INLINED, 1 with no
 vtable in any executable). 43 rows are left out on purpose:
 
 - 11 raw-RVA rows (seat addresses for one mod, not ids).
 - 25 NAME-tier rows. Their ids are not in the 1.6.1170 Address Library, so the only thing tying them to a meaning
   is the fork's own label, and this round found fork labels that were wrong. An id in the table must mean what the
   AE library says it means. On 1.6.1170 these ids fail too.
-- 7 HARD rows: five retired ids (replaced above), 248775 (added above as absent), and the retired
-  `InventoryChanges::RemoveAllItems` id 16118, whose current id is not proven yet.
+- 7 HARD rows: six retired ids (replaced above) and 248775 (added above as absent).
 
 The table binds to the Steam 1.7.104.0 SkyrimSE.exe. Another build of 1.7.104 needs its own table built from its
 own executable.
