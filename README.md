@@ -44,6 +44,56 @@ Each item is one commit, and the commit message carries the addresses and instru
 - `TESForm::LookupByID` and `LookupByEditorID` hold the game's own read lock on the form maps. In 3.7.0 they
   copied the lock and held nothing, so a lookup from another thread could read a map the game was changing.
 
+### Upstream sync 2024-09 (b93280e8)
+
+The line now carries every commit CharmedBaryon's `main` gained after 3.7.0, up to `b93280e8` (2024-09-03). That
+is 129 commits by CharmedBaryon, powerof3, Qudix and other modders. All of it is MIT. No license header, notice or
+vendored third-party code came in with it. Nothing from the GPL fork came in.
+
+What came in:
+
+- `REL/Relocation.h` is split into `REL/ID.h`, `REL/Module.h`, `REL/Offset.h`, `REL/Pattern.h`, `REL/Version.h`
+  and `REL/Relocation.h`. `REL/REL.h` includes them all, and the PCH still includes everything.
+- `REX::W32` declares the Windows, Direct3D, DXGI and XInput parts the library uses. `<Windows.h>` and
+  `SKSE::WinAPI` are gone. Engine structs now hold `REX::W32` types, for example
+  `BSGraphics::RendererData::forwarder` is a `REX::W32::ID3D11Device*`.
+- No fmt and no boost. The library uses `std::format` and builds as C++23. spdlog still brings fmt to consumers.
+- `stl::to_underlying` is gone. Use `std::to_underlying`.
+- Every `ForEach*` callback takes a pointer instead of a reference (`TESObjectCELL`, `TES`, `BGSListForm`,
+  `BGSKeywordForm`, `ProcessLists`).
+- `SerializationInterface::WriteRecord` and `WriteRecordData` templates return `bool`.
+- `ConditionCheckParams` is 0x38 bytes, with `quest`, `questStartEvent` and `packageDataList` named. Verified on
+  1.5.97 (id 29074) and 1.6.1170 (id 29888): the engine builds it with a byte at +0x28 and a qword at +0x30.
+- `InventoryEntryData::IsQuestObject` walks the extra lists and asks `ExtraDataList::HasQuestObjectAlias`
+  (11913 / 12052). Verified: that is the exact function the engine's own loop (15767 / 16005) calls.
+- New bindings and RE from powerof3 and others: `Actor` helpers (`GetHighProcess`, `IsDualCasting`,
+  `RemoveFromFaction`, `GetTotalCarryWeight`, `InitiateDoNothingPackage`), `MagicCaster::SetCurrentSpell`,
+  `BSSoundHandle`, `BSGraphics::Renderer`, `Sky`, `Console`, `BGSSaveLoad`, crafting menus, Havok constraints and
+  more. `AIProcess::forms` is now `equippedForms` (form plus equip slot). Upstream fix #93 for the default object
+  pointer and #97 for the light-mod count are in.
+
+How it meets the F1 corrections. Where both fixed the same thing, F1 wins:
+
+- The id miss stays fatal on every runtime. It moved into `REL/ID.h` with `try_id2offset`. `IsExactly` moved into
+  `REL/Module.h`.
+- `BGSDefaultObjectManager` keeps the exact-build layout. Upstream #93 fixed the pointer read but still read the
+  flags at 0xB80 on 1.6.1170. The right place there is 0xB90.
+- `ControlMap` keeps `GetRuntimeData()` and the engine's own `ToggleControls`. Upstream's new `GetGamePadType`
+  reads through `GetRuntimeData()`. Upstream's new `PushInputContext` and `PopInputContext` translate `kFavor` to
+  17 on 1.6.1170, the same as `GetInputContext`. Verified: Push (67243 / 68543) rejects an id at or above 0x11 on
+  1.5.97 and 0x12 on 1.6.1170.
+- `log_directory` keeps reading the game's own folder name (508778 / 502114). Upstream guessed it from
+  `steam_api64.dll` on disk.
+- `SKSE::RUNTIME_SSE_LATEST_AE` stays 1.6.678. Upstream added `RUNTIME_SSE_1_6_1330` as version 1.5.1330, a build
+  that does not exist. It is left out.
+- The F1 code uses `std::format` now.
+
+Two upstream defects are fixed here. `TESObjectREFR::HasKeywordWithType` dereferenced a null default object.
+`BSGraphics::Renderer::ResetWindow` used ResizeWindow's ids, so it is refused by name until a real id is verified.
+
+Upstream's `SKYRIM_SUPPORT_AE` blocks (`TES`, `InterfaceStrings`, `BGSSaveLoadManager`, `UserEvents`) stay dead
+here, the same as in 3.7.0. Nothing defines that macro in an NG build.
+
 Nothing is guessed for other builds. VR and 1.7.x are not verified here, and the new accessors refuse them.
 Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()` there is the safe behaviour.
 

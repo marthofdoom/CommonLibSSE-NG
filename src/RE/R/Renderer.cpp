@@ -108,11 +108,13 @@ namespace RE
 			return func(this, a_windowID);
 		}
 
-		void Renderer::ResetWindow(std::uint32_t a_windowID)
+		void Renderer::ResetWindow([[maybe_unused]] std::uint32_t a_windowID)
 		{
-			using func_t = decltype(&Renderer::ResetWindow);
-			REL::Relocation<func_t> func{ RELOCATION_ID(75454, 77239) };
-			return func(this, a_windowID);
+			// mit-3.7 (upstream sync 2024-09): upstream bound this to 75454 / 77239,
+			// the same ids as ResizeWindow above, so it called ResizeWindow with four of
+			// its six arguments missing. The real function's id is not verified here, so
+			// the call is refused by name instead of guessed.
+			stl::report_and_fail("BSGraphics::Renderer::ResetWindow: upstream's id is ResizeWindow's; no verified id. Refused."sv);
 		}
 
 		void Renderer::UpdateViewPort(std::uint32_t a_unk1, std::uint32_t a_unk2, bool a_unk3)

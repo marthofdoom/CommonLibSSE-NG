@@ -597,8 +597,11 @@ namespace RE
 			return false;
 		}
 
-		auto keyword = *dobj->GetObject<BGSKeyword>(keywordType);
-		return keyword ? HasKeyword(keyword) : false;
+		// mit-3.7 (upstream sync 2024-09): upstream dereferenced GetObject's result
+		// unconditionally. It is null when the default object is not initialized, or
+		// on a build whose layout is not verified (BGSDefaultObjectManager.h).
+		const auto keyword = dobj->GetObject<BGSKeyword>(keywordType);
+		return keyword && *keyword ? HasKeyword(*keyword) : false;
 	}
 
 	bool TESObjectREFR::HasQuestObject() const
