@@ -25,7 +25,7 @@ note in the commit is the reason.
 |---|---|---|
 | **1.5.97.0** | the Address Library, `version-1-5-97-0.bin` | verified |
 | **1.6.1170.0** | the Address Library, `versionlib-1-6-1170-0.bin` | verified |
-| **1.7.104.0** | this fork's own id table, `mit-idtable-1-7-104-0.bin` (see below) | verified |
+| **1.7.104.0** (Steam) | this fork's own id table, `mit-idtable-v1-1-7-104-0.bin` (see below) | verified |
 | other 1.5.x and 1.6.x | the Address Library | upstream 3.7.0 values, not verified. The exact-build accessors refuse them by name. |
 | other 1.7.x | none. The plugin stops at load with a message. | none |
 | VR | the VR Address Library CSV | upstream 3.7.0 values, not verified |
@@ -73,7 +73,9 @@ fork, so a newer fork needs a newer baseline. The port version goes up with ever
 caches vcpkg packages, put `vcpkg-configuration.json` in the cache key, or an old build of the library hides the
 new one.
 
-On 1.7.104 your plugin also needs the id table file in `Data/SKSE/Plugins/` (see below).
+On 1.7.104 your plugin also needs the id table, as a mod requirement, never bundled (see below). Build with AE
+enabled (the default multi-runtime build does): 1.7.104 uses the AE ids, so an SE-only build stops on its first id
+there.
 
 ## What changed from 3.7.0
 
@@ -121,20 +123,25 @@ Each item is one commit, and the commit message carries the proof.
   accessors follow the exact build.
 - `BSInputDeviceManager` has six device slots on 1.7.104, with the virtual keyboard in slot 5. Use `GetDevice`.
 - `BSInputEventQueue` gained three event kinds on 1.7.104. The members after the six counts are accessors now.
+- The id table has a revision, and a plugin can require one: `REL::IDDatabase::RequireMitTableRevision(n)`.
+- `REL::IDDatabase::get()` and `REL::Module::get()` check again under their lock. In 3.7.0 every thread that waited
+  on the lock loaded the database again, rewriting it under readers.
 
 Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()` there is the safe behaviour.
 
 ## The 1.7.104 id table
 
 I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork reads
-`Data/SKSE/Plugins/mit-idtable-1-7-104-0.bin` instead.
+`Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` instead.
 
-- **Format.** [docs/MIT-ID-TABLE-FORMAT.md](docs/MIT-ID-TABLE-FORMAT.md): a 64-byte header, sorted `{id, rva}`
+- **Format 1.0.** [docs/MIT-ID-TABLE-FORMAT.md](docs/MIT-ID-TABLE-FORMAT.md): a header, sorted `{id, rva}`
   records, and a checksum. The ids are the AE ids, the second id in `RELOCATION_ID(se, ae)`, so nothing changes
-  in your code.
-- **Bound to one executable.** The header holds the version, the module name, and the PE timestamp and image size
-  of the executable it was built from. The fork checks all of them against the running game. The same version
-  number can be two different builds.
+  in your code. Readers accept every 1.x: a later minor may add header or record fields, and a reader skips what it
+  does not know. A new major gets a new file name (the `v1` part), so old plugins keep their file.
+- **Bound to one executable: the Steam 1.7.104.0 SkyrimSE.exe.** The header holds the version, the module name, and
+  the PE timestamp and image size of the executable it was built from. The fork checks all of them against the
+  running game. Any other 1.7.104 build is refused with a message, because the same version number can be a
+  different build with different addresses.
 - **Private.** Each plugin reads the file into its own memory. Nothing is shared between plugins, and nothing goes
   into the shared mapping the Address Library path uses.
 - **Coverage today: 354 ids.** These are the ids my two mods reach: 226 ids their own code uses, 118 ids inside
@@ -145,16 +152,56 @@ I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork reads
   mapped. The mapper got 107 of 107 known pairs right. One id it could not prove (69188,
   `BSScaleformTranslator::GetCachedString`) is left out on purpose.
 - **A missing id stops the game, loudly.** If your plugin asks for an id the table does not have, the game stops
-  with a message naming the id and the file, and saying that the table does not cover every id yet. It never
-  returns a wrong address. A missing or damaged file, or a file for another executable, stops the game with a
-  message naming the file.
+  with a message naming the id, the file, its revision, and the revision your plugin declared it needs. It tells
+  the user to report it to the plugin's author. It never returns a wrong address. A missing or damaged file, or a
+  file for another executable, stops the game with a message naming the file.
 - **Regenerate or extend it** with [tools/mit-idtable](tools/mit-idtable/README.md): map the id on the 1.7.104
   executable, add a row with its RVA to a CSV, and build the file again. The tool refuses a row it cannot use,
   an RVA outside the executable, and an id that two CSVs map differently. `check` proves a file matches its
-  executable and its CSV.
-- The file ships next to the plugins that need it, in `Data/SKSE/Plugins/`.
+  executable and its CSV. The input CSV for the published table is `data/idmap-1.7.104.csv`, with the evidence for
+  every row, so anyone can rebuild and audit it.
+
+### Distribution rules (one shared file)
+
+Every plugin on 1.7.104 reads the same file, and the copy a mod manager installed last wins. So:
+
+1. **One canonical table**, published as its own standalone download. Plugins list it as a requirement. A plugin
+   never bundles its own copy: an older bundled copy would overwrite a newer one and take ids away from every other
+   plugin.
+2. **Every published table is a strict superset of the one before it**, with a higher revision. No id is removed,
+   no RVA changes. `mit_idtable.py build --previous <last published file>` refuses anything else.
+3. **Your plugin declares the lowest revision it needs**, right after `SKSE::Init`:
+   `REL::IDDatabase::RequireMitTableRevision(1);`. On 1.7.104 an older table then stops the game at load with a
+   message naming both revisions. On other builds the call only records the value.
+
+The table in `data/` is revision 1.
 - On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
   `GetDevice` and `GetVirtualKeyboard` handle that. The device number inside its input events is not verified.
+
+## Source-breaking changes and migration
+
+These changes stop code that compiled against 3.7.0 from compiling, on purpose: the old member was at the wrong
+offset on some verified build, and a compile error is better than a wrong read.
+
+| 3.7.0 | this fork | why |
+|---|---|---|
+| `ControlMap` members after `controlMap[]` (`enabledControls`, `contextPriorityStack`, ...) | `GetRuntimeData().<member>`; contexts through `GetInputContext(id)` | they move by 8 on 1.6.1170 and 1.7.104 |
+| `CombatController` members from +0x68 (`cachedTarget`, `handleCount`, ...) | `GetRuntimeData().<member>` | they move by 8 on 1.6.1170 and 1.7.104 |
+| `CombatMagicCaster::GetMagicTarget` returning `void*` | returns `MagicTarget` (`{handle, actor}`) | the game returns 16 bytes through a hidden out-slot |
+| `ControlMap::ToggleControls(flags, enable)` | gains `storeState` (default `true`) | it calls the game's own function now |
+| `BSInputEventQueue::buttonEvents`, `charEvents`, `mouseEvents`, `thumbstickEvents`, `connectEvents`, `kinectEvents`, `queueHead`, `queueTail` | `GetButtonEvents()`, `GetCharEvents()`, `GetMouseEvents()`, `GetThumbstickEvents()`, `GetConnectEvents()`, `GetKinectEvents()`, `GetQueueHead()`, `GetQueueTail()` | they move on 1.7.104 |
+
+Not a compile error, but wrong on 1.7.104 if used directly:
+
+- `BSInputDeviceManager::devices[4]`: use `GetDevice(INPUT_DEVICE)`. 1.7.104 has six slots and the virtual keyboard
+  in slot 5, so `devices[kVirtualKeyboard]` is empty there.
+- In a build with VR disabled, `BSInputDeviceManager` also declares its runtime members (`pollingEnabled`,
+  `remoteGamepadEventSource`, ...) inline at +0x80. On 1.7.104 they sit at +0x90. Use `GetRuntimeData()`, which is
+  right on every build.
+- `BGSDefaultObjectManager::objects[i]` read directly is only right below index 188 on every verified build. Use
+  `GetObject`.
+- Fields of `PlayerCharacter` that a single-runtime build declares inline are only right for that runtime. Use the
+  accessors (`GetPlayerRuntimeData()` and the others).
 
 ---
 

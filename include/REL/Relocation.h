@@ -656,12 +656,17 @@ namespace REL {
         };
 
         [[nodiscard]] static Module &get() {
-            if (_initialized.load(std::memory_order_relaxed)) {
+            // mit-3.7: double-checked. Upstream re-ran init() for every thread that had
+            // queued on the lock while the first one initialized, rewriting the instance
+            // under readers. Acquire pairs with the release below.
+            if (_initialized.load(std::memory_order_acquire)) {
                 return _instance;
             }
             [[maybe_unused]] std::unique_lock lock(_initLock);
-            _instance.init();
-            _initialized = true;
+            if (!_initialized.load(std::memory_order_relaxed)) {
+                _instance.init();
+                _initialized.store(true, std::memory_order_release);
+            }
             return _instance;
         }
 
@@ -1053,12 +1058,18 @@ namespace REL {
         };
 
         [[nodiscard]] static IDDatabase &get() {
-            if (_initialized.load(std::memory_order_relaxed)) {
+            // mit-3.7: double-checked. Upstream re-ran load() for every thread that had
+            // queued on the lock while the first one loaded. On 1.7.104 a second load would
+            // free the id table another thread is searching. The relaxed store also let a
+            // reader see _initialized before the table. Acquire pairs with the release below.
+            if (_initialized.load(std::memory_order_acquire)) {
                 return _instance;
             }
             [[maybe_unused]] std::unique_lock lock(_initLock);
-            _instance.load();
-            _initialized.store(true, std::memory_order_relaxed);
+            if (!_initialized.load(std::memory_order_relaxed)) {
+                _instance.load();
+                _initialized.store(true, std::memory_order_release);
+            }
             return _instance;
         }
 
@@ -1107,18 +1118,26 @@ namespace REL {
             // (whose caption is this plugin's file name) and the process stops.
             // No fallback, no guess (CLAUDE.md principle 7).
             if (it == _id2offset.end() || it->id != a_id) {
-                if (_mitTableActive) {
+                if (_mitTableRevision != 0) {
                     // mit-3.7: the id source on this build is our own id table, which does not
-                    // cover the whole id space yet. Say so, so the plugin author knows which id
-                    // to map and where it has to go.
+                    // cover the whole id space yet. Say so, with the revisions, so the user knows
+                    // whether updating the table can help and the author knows what to map.
+                    const auto required = _mitRequiredRevision.load(std::memory_order_relaxed);
                     stl::report_and_fail(
                             fmt::format(
-                                    "Address Library id {} is not in the id table {} (game version {}).\n"
+                                    "Address Library id {} is not in the id table {} (revision {}, game version {}).\n"
+                                    "{}\n"
                                     "This game version gets its ids from that file, not from the Address Library. "
-                                    "The table does not cover every id yet, and this plugin needs one it does not have. "
-                                    "No address was guessed. Map the id on this exact executable, add it to the table "
-                                    "(tools/mit-idtable in github.com/marthofdoom/CommonLibSSE-NG), and rebuild the file."sv,
-                                    a_id, mit_table_path(Module::get().version()), Module::get().version().string(".")));
+                                    "The table does not cover every id yet. No address was guessed.\n"
+                                    "Please report this to the plugin's author, with this message. Plugin authors: map "
+                                    "the id on this exact executable, add it to the table (tools/mit-idtable in "
+                                    "github.com/marthofdoom/CommonLibSSE-NG), publish a new revision, and require it "
+                                    "with REL::IDDatabase::RequireMitTableRevision."sv,
+                                    a_id, mit_table_path(Module::get().version()), _mitTableRevision,
+                                    Module::get().version().string("."),
+                                    required != 0 ?
+                                        fmt::format("This plugin declared that it needs revision {} or newer."sv, required) :
+                                        "This plugin did not declare which table revision it needs."s));
                 }
                 stl::report_and_fail(
                         fmt::format(
@@ -1130,6 +1149,30 @@ namespace REL {
 
             return static_cast<std::size_t>(it->offset);
         }
+
+        /**
+         * mit-3.7: declares the lowest MIT id table revision this plugin works with. Call it
+         * once, right after SKSE::Init (it loads the database if needed). Where the MIT id table
+         * is the id source (1.7.104.0) and its revision is lower, the game stops with a message
+         * naming both revisions. Everywhere else it only records the value. The highest value
+         * asked for wins, and it is also named in the message for an id the table lacks.
+         */
+        static void RequireMitTableRevision(std::uint32_t a_revision) {
+            auto& db = get();
+            auto current = _mitRequiredRevision.load(std::memory_order_relaxed);
+            while (current < a_revision &&
+                   !_mitRequiredRevision.compare_exchange_weak(current, a_revision, std::memory_order_relaxed)) {
+            }
+            if (db._mitTableRevision != 0 && db._mitTableRevision < a_revision) {
+                db.fail_old_revision(a_revision);
+            }
+        }
+
+        /**
+         * mit-3.7: the revision of the MIT id table in use, or 0 when the ids come from the
+         * Address Library (every build but 1.7.104.0).
+         */
+        [[nodiscard]] std::uint32_t MitTableRevision() const noexcept { return _mitTableRevision; }
 
         /**
          * mit-3.7: the non-fatal twin of id2offset, for self-checks that must report a
@@ -1321,12 +1364,16 @@ namespace REL {
         }
 
         /**
-         * mit-3.7: loads the MIT id table (docs/MIT-ID-TABLE-FORMAT.md, format 1) for 1.7.104.0.
+         * mit-3.7: loads the MIT id table (docs/MIT-ID-TABLE-FORMAT.md, format 1.x) for 1.7.104.0.
          *
          * The file is read whole into memory, checked against every rule in the format note, and
          * its records are copied into _mitTable, a buffer this DLL owns. It is never placed in the
          * shared, writable CommonLibSSEOffsets-v2 mapping that load_file uses, so no other plugin
          * can change what this one reads, and this one changes nothing for anyone else.
+         *
+         * Growth: any format 1 minor is read. A header or record larger than this reader knows
+         * is read for the fields it knows and the rest is skipped. A different format major is
+         * a different file name (mit-idtable-v<major>-...), so it never reaches this reader.
          *
          * The header binds the file to one exact executable: version, module name, and the PE
          * TimeDateStamp and SizeOfImage read from the running image's own headers. Every failure
@@ -1347,9 +1394,11 @@ namespace REL {
                 stl::report_and_fail(
                         fmt::format(
                                 "The id table {} cannot be used: {}.\n"
-                                "On Skyrim {} this plugin reads its addresses from that file (not from the Address "
-                                "Library). Install the matching id table, or update it."sv,
-                                path, a_why, a_version.string(".")));
+                                "On Skyrim {} this plugin reads its addresses from that file, not from the Address "
+                                "Library. Install or update the MIT id table for Skyrim {} (one standalone download "
+                                "that every plugin using it shares). If it is installed and current, report this to "
+                                "the plugin's author."sv,
+                                path, a_why, a_version.string("."), a_version.string(".")));
             };
 
             std::vector<std::uint8_t> data;
@@ -1370,30 +1419,39 @@ namespace REL {
                 }
             }
 
-            constexpr std::size_t headerSize = 64;
-            constexpr std::size_t recordSize = 16;
+            constexpr std::size_t minHeaderSize = 64;
+            constexpr std::size_t minRecordSize = 16;
             constexpr std::size_t trailerSize = 8;
+            constexpr std::uint16_t formatMajor = 1;
             const auto u16at = [&](std::size_t a_off) { std::uint16_t v; std::memcpy(&v, data.data() + a_off, sizeof(v)); return v; };
             const auto u32at = [&](std::size_t a_off) { std::uint32_t v; std::memcpy(&v, data.data() + a_off, sizeof(v)); return v; };
             const auto u64at = [&](std::size_t a_off) { std::uint64_t v; std::memcpy(&v, data.data() + a_off, sizeof(v)); return v; };
 
-            if (data.size() < headerSize + trailerSize) {
+            // 1. Size, magic, format, sizes, flags (the order of the format note).
+            if (data.size() < minHeaderSize + trailerSize) {
                 fail(fmt::format("it is {} bytes, smaller than a header and a checksum"sv, data.size()));
             }
             if (std::memcmp(data.data(), "MITIDTAB", 8) != 0) {
                 fail("it is not an MIT id table (bad magic)"sv);
             }
-            if (const auto fmtVersion = u32at(8); fmtVersion != 1) {
-                fail(fmt::format("it is format {}, this library reads format 1"sv, fmtVersion));
+            if (const auto major = u16at(8); major != formatMajor) {
+                fail(fmt::format("it is format {}.{}, this library reads format {}.x"sv, major, u16at(10), formatMajor));
             }
-            if (u32at(12) != headerSize || u32at(36) != recordSize || u32at(40) != 0 || u32at(44) != 0) {
-                fail("its header sizes or reserved fields are not the format-1 values"sv);
+            const std::size_t headerSize = u32at(12);
+            const std::size_t recordSize = u32at(36);
+            if (headerSize < minHeaderSize || recordSize < minRecordSize || headerSize > data.size() || recordSize > 4096) {
+                fail(fmt::format("its header size {} or record size {} is not valid (at least {} and {})"sv,
+                                 headerSize, recordSize, minHeaderSize, minRecordSize));
+            }
+            if (const auto flags = u32at(40); flags != 0) {
+                fail(fmt::format("it sets flags {:X} this library does not know"sv, flags));
             }
             const std::size_t count = u32at(32);
             if (data.size() != headerSize + recordSize * count + trailerSize) {
                 fail(fmt::format("it is {} bytes, but {} records need exactly {}"sv,
                                  data.size(), count, headerSize + recordSize * count + trailerSize));
             }
+            // 2. Checksum.
             {
                 std::uint64_t hash = 0xCBF29CE484222325ull;
                 for (std::size_t i = 0; i < data.size() - trailerSize; ++i) {
@@ -1404,6 +1462,11 @@ namespace REL {
                     fail("its checksum does not match (the file is damaged)"sv);
                 }
             }
+            const auto revision = u32at(44);
+            if (revision == 0) {
+                fail("its table revision is 0"sv);
+            }
+            // 3. The executable: version, module name, PE stamp and image size.
             const Version fileVersion(u16at(16), u16at(18), u16at(20), u16at(22));
             if (fileVersion != a_version) {
                 fail(fmt::format("it is for game version {}"sv, fileVersion.string(".")));
@@ -1421,46 +1484,66 @@ namespace REL {
                     fail(fmt::format("it is for {}, the game is {}"sv, want, exe));
                 }
             }
-            {
-                // The running image's own PE headers (mapped at the module base).
-                const auto base = reinterpret_cast<const std::uint8_t*>(Module::get().base());
-                std::uint32_t peOffset;
-                std::memcpy(&peOffset, base + 0x3C, sizeof(peOffset));
-                std::uint32_t signature, timeDateStamp, sizeOfImage;
-                std::memcpy(&signature, base + peOffset, sizeof(signature));
-                std::memcpy(&timeDateStamp, base + peOffset + 8, sizeof(timeDateStamp));
-                std::memcpy(&sizeOfImage, base + peOffset + 24 + 56, sizeof(sizeOfImage));
-                if (signature != 0x00004550u) {
-                    fail("the game executable's PE header could not be read"sv);
+            // The running image's own PE headers (mapped at the module base).
+            const auto base = reinterpret_cast<const std::uint8_t*>(Module::get().base());
+            std::uint32_t peOffset;
+            std::memcpy(&peOffset, base + 0x3C, sizeof(peOffset));
+            std::uint32_t signature, timeDateStamp, sizeOfImage;
+            std::memcpy(&signature, base + peOffset, sizeof(signature));
+            std::memcpy(&timeDateStamp, base + peOffset + 8, sizeof(timeDateStamp));
+            std::memcpy(&sizeOfImage, base + peOffset + 24 + 56, sizeof(sizeOfImage));
+            if (signature != 0x00004550u) {
+                fail("the game executable's PE header could not be read"sv);
+            }
+            if (timeDateStamp != u32at(24) || sizeOfImage != u32at(28)) {
+                fail(fmt::format(
+                        "it was built from a different {} executable (file: TimeDateStamp {:08X}, SizeOfImage {:X}; "
+                        "game: {:08X}, {:X}). It is for the Steam build, and the same version number can be another "
+                        "build"sv,
+                        a_version.string("."), u32at(24), u32at(28), timeDateStamp, sizeOfImage));
+            }
+            // 4. Records: strictly ascending ids, every RVA inside the image. Bytes past the
+            // first 16 of a record belong to a later minor and are skipped.
+            _mitTable = std::make_unique<mapping_t[]>(count);
+            std::uint64_t prev = 0;
+            for (std::size_t i = 0; i < count; ++i) {
+                const auto at = headerSize + recordSize * i;
+                const auto id = u64at(at);
+                const auto rva = u64at(at + 8);
+                if (i != 0 && id <= prev) {
+                    fail(fmt::format("its records are not strictly sorted by id (id {} after {})"sv, id, prev));
                 }
-                if (timeDateStamp != u32at(24) || sizeOfImage != u32at(28)) {
-                    fail(fmt::format(
-                            "it was built from a different {} executable (file: TimeDateStamp {:08X}, SizeOfImage {:X}; "
-                            "game: {:08X}, {:X}). The same version number can be two different builds"sv,
-                            a_version.string("."), u32at(24), u32at(28), timeDateStamp, sizeOfImage));
+                if (rva == 0 || rva >= sizeOfImage) {
+                    fail(fmt::format("id {} has RVA {:X}, outside the executable"sv, id, rva));
                 }
-                _mitTable = std::make_unique<mapping_t[]>(count);
-                std::uint64_t prev = 0;
-                for (std::size_t i = 0; i < count; ++i) {
-                    const auto id = u64at(headerSize + recordSize * i);
-                    const auto rva = u64at(headerSize + recordSize * i + 8);
-                    if (i != 0 && id <= prev) {
-                        fail(fmt::format("its records are not strictly sorted by id (id {} after {})"sv, id, prev));
-                    }
-                    if (rva == 0 || rva >= sizeOfImage) {
-                        fail(fmt::format("id {} has RVA {:X}, outside the executable"sv, id, rva));
-                    }
-                    _mitTable[i] = { id, rva };
-                    prev = id;
-                }
+                _mitTable[i] = { id, rva };
+                prev = id;
             }
 
-            _mitTableActive = true;
+            _mitTableRevision = revision;
             _id2offset = { _mitTable.get(), count };
+            if (const auto required = _mitRequiredRevision.load(std::memory_order_relaxed); required > revision) {
+                fail_old_revision(required);
+            }
         }
 
+        /**
+         * mit-3.7: the path of the MIT id table for a game version. The format MAJOR is part
+         * of the name: a later incompatible major ships as a second file beside this one, so
+         * plugins built for major 1 keep loading their file. Minor versions keep the name.
+         */
         [[nodiscard]] static std::string mit_table_path(Version a_version) {
-            return fmt::format("Data/SKSE/Plugins/mit-idtable-{}.bin"sv, a_version.string());
+            return fmt::format("Data/SKSE/Plugins/mit-idtable-v1-{}.bin"sv, a_version.string());
+        }
+
+        [[noreturn]] void fail_old_revision(std::uint32_t a_required) const {
+            const auto version = Module::get().version();
+            stl::report_and_fail(
+                    fmt::format(
+                            "The id table {} is revision {}, and this plugin needs revision {} or newer.\n"
+                            "Update the MIT id table for Skyrim {} (one standalone download that every plugin using "
+                            "it shares). A plugin must not ship its own copy of the table."sv,
+                            mit_table_path(version), _mitTableRevision, a_required, version.string(".")));
         }
 
         bool load_csv(stl::zwstring a_filename, Version a_version, bool a_failOnError) {
@@ -1596,7 +1679,7 @@ namespace REL {
             _mmap.close();
             _id2offset = {};
             _mitTable.reset();
-            _mitTableActive = false;
+            _mitTableRevision = 0;
         }
 
         static IDDatabase _instance;
@@ -1608,7 +1691,8 @@ namespace REL {
         // constant-initialized (no dynamic initializer for _instance, as before), so a lookup
         // during another TU's static initialization cannot be undone by a late constructor.
         std::unique_ptr<mapping_t[]> _mitTable;
-        bool _mitTableActive{false};
+        std::uint32_t _mitTableRevision{0};  // its revision, 0 when it is not the id source
+        static inline std::atomic<std::uint32_t> _mitRequiredRevision{0};  // RequireMitTableRevision
     };
 
     class Offset {
