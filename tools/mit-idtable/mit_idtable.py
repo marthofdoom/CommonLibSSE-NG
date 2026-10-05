@@ -116,34 +116,46 @@ def parse_where(items):
     return out
 
 
-def read_rows(paths, id_col, rva_col, where):
+def read_rows(paths, id_col, rva_col, where, absent_where=()):
+    """-> {id: (rva, where)}. rva 0 = an absent record (the row matches every --absent-where)."""
     rows = {}
-    kept = dropped = 0
+    kept = dropped = absent = 0
     for path in paths:
         with open(path, newline='') as f:
             reader = csv.DictReader(f)
-            for col in [id_col, rva_col] + [c for c, _ in where]:
+            for col in [id_col, rva_col] + [c for c, _ in where] + [c for c, _ in absent_where]:
                 if col not in (reader.fieldnames or []):
                     raise SystemExit('%s: no column %r (columns: %s)' % (path, col, ', '.join(reader.fieldnames or [])))
             for lineno, row in enumerate(reader, start=2):
-                if any(row[c] not in vals for c, vals in where):
+                where_txt = '%s:%d' % (path, lineno)
+                is_absent = bool(absent_where) and all(row[c] in vals for c, vals in absent_where)
+                if not is_absent and any(row[c] not in vals for c, vals in where):
                     dropped += 1
                     continue
-                where_txt = '%s:%d' % (path, lineno)
                 try:
                     i = parse_int(row[id_col], 'id')
-                    if not row[rva_col].strip():
-                        raise ValueError('id %d has no rva in column %r' % (i, rva_col))
-                    r = parse_int(row[rva_col], 'rva')
+                    if is_absent:
+                        r = 0
+                    else:
+                        if not row[rva_col].strip():
+                            raise ValueError('id %d has no rva in column %r' % (i, rva_col))
+                        r = parse_int(row[rva_col], 'rva')
+                        if r == 0:
+                            raise ValueError('id %d has rva 0 (only --absent-where rows may be absent)' % i)
                 except ValueError as e:
                     raise SystemExit('%s: %s (filter it out with --where, or fix the row)' % (where_txt, e))
                 if i < 0 or i >= 1 << 64:
                     raise SystemExit('%s: id %d out of range' % (where_txt, i))
                 if i in rows and rows[i][0] != r:
-                    raise SystemExit('%s: id %d maps to 0x%X here and 0x%X at %s' % (where_txt, i, r, rows[i][0], rows[i][1]))
-                rows.setdefault(i, (r, where_txt))
-                kept += 1
-    return rows, kept, dropped
+                    raise SystemExit('%s: id %d maps to 0x%X here and 0x%X at %s (0 = absent)' % (
+                        where_txt, i, r, rows[i][0], rows[i][1]))
+                if i not in rows:
+                    rows[i] = (r, where_txt)
+                    if is_absent:
+                        absent += 1
+                    else:
+                        kept += 1
+    return rows, kept, dropped, absent
 
 
 def pack(version, tds, soi, module, revision, records):
@@ -189,8 +201,8 @@ def unpack(data, label):
     for i, r in records:
         if prev is not None and i <= prev:
             fail('records not strictly ascending at id %d (after %d)' % (i, prev))
-        if r == 0 or r >= soi:
-            fail('id %d has rva 0x%X, outside (0, SizeOfImage 0x%X)' % (i, r, soi))
+        if r >= soi:
+            fail('id %d has rva 0x%X, outside SizeOfImage 0x%X' % (i, r, soi))
         prev = i
     hdr = dict(format=(major, minor), version=(v0, v1, v2, v3), time_date_stamp=tds, size_of_image=soi,
                count=count, revision=revision, module=module.rstrip(b'\0').decode('ascii', 'replace'),
@@ -209,7 +221,7 @@ def check_against_exe(hdr, records, exe, label, module=None):
     if hdr['size_of_image'] != exe.size_of_image:
         problems.append('peSizeOfImage 0x%X, executable 0x%X' % (hdr['size_of_image'], exe.size_of_image))
     for i, r in records:
-        if exe.section_of(r) is None:
+        if r != 0 and exe.section_of(r) is None:
             problems.append('id %d rva 0x%X is in no section of %s' % (i, r, exe.name))
     if problems:
         raise SystemExit('%s:\n  ' % label + '\n  '.join(problems))
@@ -230,11 +242,11 @@ def cmd_build(a):
     exe = ExeInfo(a.exe)
     module = module_name(a, exe)
     where = parse_where(a.where)
-    rows, kept, dropped = read_rows(a.csv, a.id_col, a.rva_col, where)
+    rows, kept, dropped, absent = read_rows(a.csv, a.id_col, a.rva_col, where, parse_where(a.absent_where))
     if not rows:
         raise SystemExit('no rows left after the filters')
     for i, (r, src) in rows.items():
-        if r == 0 or r >= exe.size_of_image or exe.section_of(r) is None:
+        if r != 0 and (r >= exe.size_of_image or exe.section_of(r) is None):
             raise SystemExit('%s: id %d rva 0x%X is not inside %s' % (src, i, r, exe.name))
     records = sorted((i, r) for i, (r, _) in rows.items())
     if a.previous:
@@ -242,7 +254,8 @@ def cmd_build(a):
         phdr, prec = unpack(open(a.previous, 'rb').read(), a.previous)
         have = dict(records)
         lost = [i for i, _ in prec if i not in have]
-        moved = [i for i, r in prec if i in have and have[i] != r]
+        # a mapped id stays mapped at the same RVA; an absent id may only stay absent or become mapped
+        moved = [i for i, r in prec if i in have and have[i] != r and r != 0]
         if lost or moved:
             raise SystemExit('not a superset of %s: %d ids dropped, %d ids changed RVA (first: %s)' % (
                 a.previous, len(lost), len(moved), (lost + moved)[:5]))
@@ -258,9 +271,9 @@ def cmd_build(a):
     assert back == records
     with open(out, 'wb') as f:
         f.write(data)
-    print('wrote %s: format %d.%d, revision %d, %d records (%d CSV rows kept, %d filtered out), game %s, module %s, '
-          'TimeDateStamp 0x%08X, SizeOfImage 0x%X, checksum 0x%016X' % (
-              out, FORMAT_MAJOR, FORMAT_MINOR, a.revision, len(records), kept, dropped,
+    print('wrote %s: format %d.%d, revision %d, %d records (%d mapped, %d absent; %d CSV rows filtered out), game %s, '
+          'module %s, TimeDateStamp 0x%08X, SizeOfImage 0x%X, checksum 0x%016X' % (
+              out, FORMAT_MAJOR, FORMAT_MINOR, a.revision, len(records), kept, absent, dropped,
               '.'.join(map(str, exe.version)), module, exe.time_date_stamp, exe.size_of_image, hdr['checksum']))
 
 
@@ -270,7 +283,7 @@ def cmd_check(a):
     if a.exe:
         check_against_exe(hdr, records, ExeInfo(a.exe), a.bin, a.module)
     if a.csv:
-        rows, _, _ = read_rows(a.csv, a.id_col, a.rva_col, parse_where(a.where))
+        rows, _, _, _ = read_rows(a.csv, a.id_col, a.rva_col, parse_where(a.where), parse_where(a.absent_where))
         want = sorted((i, r) for i, (r, _) in rows.items())
         if want != records:
             have = dict(records)
@@ -291,7 +304,7 @@ def cmd_dump(a):
         hdr['size_of_image'], hdr['count'], hdr['checksum']))
     print('id,rva')
     for i, r in records:
-        print('%d,0x%X' % (i, r))
+        print('%d,%s' % (i, '0x%X' % r if r else 'absent'))
 
 
 def main(argv=None):
@@ -304,6 +317,9 @@ def main(argv=None):
         p.add_argument('--rva-col', default='rva', help='column with the RVA (default: rva)')
         p.add_argument('--where', action='append', metavar='COL=V1,V2',
                        help='keep only rows whose COL is one of the values (repeatable, all must hold)')
+        p.add_argument('--absent-where', action='append', metavar='COL=V1,V2',
+                       help='rows matching every one of these become ABSENT records (rva 0: known not to exist in '
+                            'this executable); they are not subject to --where')
 
     b = sub.add_parser('build', help='CSV(s) + executable -> .bin')
     b.add_argument('--exe', required=True, help='the exact game executable the RVAs were taken from')

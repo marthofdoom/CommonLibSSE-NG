@@ -58,8 +58,10 @@ Little endian. Offsets are from the start of the file.
 | 8 | u64 | rva |
 
 - Records are sorted by `id`, strictly ascending. No id appears twice.
-- `rva` is the offset from the image base, never 0, and less than `peSizeOfImage`.
-- An id that is not in the file is NOT mapped. There is no "next id", no default and no zero entry.
+- `rva` is the offset from the image base, less than `peSizeOfImage`.
+- `rva` 0 is an **absent record**: the id is known NOT to exist in this executable (the game removed the function
+  or object, inlined it into its callers, or the id was retired from the AE column). It is never an address.
+- An id that is not in the file is NOT mapped. There is no "next id" and no default.
 
 ### Trailer, 8 bytes, at offset `headerSize + recordSize * n`
 
@@ -99,7 +101,8 @@ Every failure is fatal and names the file. Nothing falls back to another source.
 12. moduleName matches the running executable's file name (case-insensitive).
 13. peTimeDateStamp and peSizeOfImage equal the values in the running executable's own PE headers in memory. This
     binds the file to one exact build, not just one version number.
-14. Records are strictly ascending by id, and every rva is non-zero and below the running image's SizeOfImage.
+14. Records are strictly ascending by id, and every rva is below the running image's SizeOfImage (0 is an absent
+    record).
 15. If the plugin already declared a minimum revision (see below), tableRevision is at least that.
 
 The fork loads the records into a buffer owned by the plugin (one copy per DLL). It never puts them in the shared,
@@ -109,9 +112,15 @@ can never change what another plugin reads.
 ## Lookups
 
 A lookup of an id that is not in the file stops the game with a message that names the id, the file, its revision,
-the game version, and the revision the plugin declared it needs (or that it declared none). It asks the user to
-report it to the plugin's author. It never returns a neighbouring id's address. `REL::IDDatabase::try_id2offset`
-is the quiet version for self-checks: it returns nothing.
+the game version, and the revision the plugin declared it needs (or that it declared none). It says the table does
+not cover every id yet and asks the user to report it to the plugin's author.
+
+A lookup of an absent record stops the game with a message that the id does not exist in this game version (the
+game removed or inlined it), and asks the user to report it to the plugin's author. Updating the table cannot fix
+that one: the plugin needs another way.
+
+Neither ever returns a neighbouring id's address. `REL::IDDatabase::try_id2offset` is the quiet version for
+self-checks: it returns nothing for both.
 
 ## Revisions and distribution
 
@@ -121,8 +130,9 @@ manager installed last is the one every plugin gets. So:
 1. **There is one canonical table**, published as its own standalone download. Plugins DEPEND on it (a mod
    requirement). A plugin never bundles its own copy, because an older bundled copy would overwrite a newer one and
    take ids away from every other plugin.
-2. **Each published table is a strict superset of the previous one.** No id is removed, no id's RVA changes, and
-   tableRevision goes up. `mit_idtable.py build --previous <last published file>` enforces all three.
+2. **Each published table is a strict superset of the previous one.** No id is removed, no mapped id's RVA
+   changes, no mapped id becomes absent, and tableRevision goes up. An absent id may become mapped, as a
+   correction. `mit_idtable.py build --previous <last published file>` enforces all of it.
 3. **A plugin declares the lowest revision it needs**, right after `SKSE::Init`:
 
    ```cpp

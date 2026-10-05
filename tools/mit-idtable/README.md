@@ -17,38 +17,58 @@ You need two things:
 ```
 python3 tools/mit-idtable/mit_idtable.py build \
     --exe path/to/1.7.104/SkyrimSE.exe \
-    --csv idmap-1.7.104.csv \
+    --csv data/idmap-1.7.104-fork-full.csv \
+    --csv data/idmap-1.7.104-fixes.csv \
     --rva-col rva_1_7_104 \
-    --where kind=id,vtable,rtti \
+    --where kind=id,vtable,rtti,nirtti \
+    --where final_state=MAPPED \
     --where confidence=EXACT,UNIQUE-SIG,XREF \
     --where crosscheck=pass,na \
+    --absent-where final_state=REMOVED,INLINED,ABSENT \
     --revision 1 \
     --out Data/SKSE/Plugins/
 ```
 
-This writes `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revision 1).
-
-- `--revision N` is required. It goes into the header and must be higher than every table published before for
-  this game version.
-- `--previous FILE` names the last published table. The build then refuses to drop any of its ids or change any of
-  their RVAs, and refuses a revision that is not higher. Always pass it when you build a table to publish: every
-  published table must be a strict superset of the one before (docs/MIT-ID-TABLE-FORMAT.md, "Revisions and
-  distribution").
-- `--module NAME` is the module name the game runs under, `SkyrimSE.exe` by default. The tool warns when the
-  executable you pass is named differently (for example a renamed copy), since the fork compares the name.
+This writes `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revision 1). It is exactly the table in
+`data/`.
 
 - `--where COL=A,B` keeps a row only when COL is one of the listed values. Give it several times and every one
   must hold. Rows that pass the filters must have a numeric id and an RVA, or the build stops and names the row.
   A table never drops an id quietly.
+- `--absent-where COL=A,B` turns every row that matches all of them into an ABSENT record (rva 0): the id is known
+  not to exist in this executable, and a lookup says so instead of "not covered yet". These rows skip `--where`.
 - `--csv` can be given several times, so new mappings can live in their own file. An id that appears twice must
-  have the same RVA everywhere, or the build stops.
+  have the same RVA (or be absent) everywhere, or the build stops.
 - Every RVA must fall inside a section of the executable.
+- `--revision N` is required. It goes into the header and must be higher than every table published before for
+  this game version.
+- `--previous FILE` names the last published table. The build then refuses to drop any of its ids, change a mapped
+  id's RVA, make a mapped id absent, or keep the revision. Always pass it when you build a table to publish: every
+  published table must be a strict superset of the one before (docs/MIT-ID-TABLE-FORMAT.md, "Revisions and
+  distribution").
+- `--module NAME` is the module name the game runs under, `SkyrimSE.exe` by default. The tool warns when the
+  executable you pass is named differently (for example a renamed copy), since the fork compares the name.
 - After writing, the tool reads its own output back under the same rules the fork applies.
 
-The command above, with `--csv data/idmap-1.7.104.csv`, builds the table in `data/`, revision 1. That CSV is
-committed with its evidence columns so anyone can rebuild and audit it. It has 366 rows: 355 ids and 11 raw-RVA
-rows (seat addresses for one mod, not ids, left out by `--where kind=...`). The table holds 354 of the 355 ids. The
-one left out, 69188 (`BSScaleformTranslator::GetCachedString`), could not be proven and is UNRESOLVED in the CSV.
+### What the published table holds (revision 1)
+
+The inputs are committed in `data/` with their evidence, so anyone can rebuild and audit them:
+
+- `idmap-1.7.104-fork-full.csv`: every id this fork names (17,677) plus 127 ids my mods use, mapped from 1.6.1170
+  to 1.7.104 by disassembly. `summary-1.7.104-fork-full.md` and `selftest-1.7.104-fork-full.md` are the mapper's
+  report: ground truth 107 of 107, every precision self-test 0 wrong.
+- `idmap-1.7.104-fixes.csv`: four fork ids that were retired from the AE column and their current ids
+  (443410, 439876, 441582, 504099, each with its evidence), and `VTABLE_std__bad_weak_ptr` (248775) recorded as
+  absent.
+
+The build above gives 17,691 records: **16,442 mapped** and **1,249 absent** (1,247 ids REMOVED, 1 INLINED, 1 with no
+vtable in any executable). 41 rows are left out on purpose:
+
+- 11 raw-RVA rows (seat addresses for one mod, not ids).
+- 25 NAME-tier rows. Their ids are not in the 1.6.1170 Address Library, so the only thing tying them to a meaning
+  is the fork's own label, and this round found fork labels that were wrong. An id in the table must mean what the
+  AE library says it means. On 1.6.1170 these ids fail too.
+- 5 HARD rows: the four retired ids (replaced above) and 248775 (added above as absent).
 
 The table binds to the Steam 1.7.104.0 SkyrimSE.exe. Another build of 1.7.104 needs its own table built from its
 own executable.

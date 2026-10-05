@@ -124,6 +124,16 @@ Each item is one commit, and the commit message carries the proof.
 - `BSInputDeviceManager` has six device slots on 1.7.104, with the virtual keyboard in slot 5. Use `GetDevice`.
 - `BSInputEventQueue` gained three event kinds on 1.7.104. The members after the six counts are accessors now.
 - The id table has a revision, and a plugin can require one: `REL::IDDatabase::RequireMitTableRevision(n)`.
+- Upstream id bugs found while mapping every id, each checked against the 1.6.1170 library and executable:
+  - `VTABLE_BSTDerivedCreator_MovementMessageFreezeDirection_MovementMessage_` and
+    `VTABLE_AutoRegisterCreator_MovementMessageFreezeDirection_..._MovementMessage_64__` had each other's AE ids
+    (246208 and 246214). Swapped back.
+  - Four AE ids were retired after 1.6.659 and do not exist in the 1.6.1130, 1.6.1170 or 1.6.1179 libraries:
+    `GetCachedString` 69188 is now 443410, `Set_CStr` 11044 is now 439876, `SelectedRef` 405935 is now 504099,
+    `CompileAndRun` 21890 is now 441582. With F1 a lookup of the old ids already stopped the game. Now they work.
+  - `VTABLE_std__bad_weak_ptr` (248775) has no vtable in any executable. It is kept so code still compiles, and is
+    documented as absent.
+- The id table can mark an id as absent (known not to exist in that game version), and a lookup says so.
 - `REL::IDDatabase::get()` and `REL::Module::get()` check again under their lock. In 3.7.0 every thread that waited
   on the lock loaded the database again, rewriting it under readers.
 
@@ -144,22 +154,26 @@ I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork reads
   different build with different addresses.
 - **Private.** Each plugin reads the file into its own memory. Nothing is shared between plugins, and nothing goes
   into the shared mapping the Address Library path uses.
-- **Coverage today: 354 ids.** These are the ids my two mods reach: 226 ids their own code uses, 118 ids inside
-  CommonLib functions they call, and 10 that every plugin uses (memory manager, BSFixedString, RTDynamicCast, the
-  log folder). By kind: 254 functions or globals, 89 vtables, 11 RTTI type descriptors. Each one was mapped from
-  its 1.6.1170 address to 1.7.104 by disassembly, with its evidence and a crosscheck: 177 by exact RTTI or import
-  name, 125 by a function signature that occurs once in each executable, 52 through callers and callees already
-  mapped. The mapper got 107 of 107 known pairs right. One id it could not prove (69188,
-  `BSScaleformTranslator::GetCachedString`) is left out on purpose.
+- **Coverage today (revision 1): every id this fork names.** 17,691 records: **16,442 mapped** (579 functions,
+  117 globals, 410 NiRTTI objects, 8,016 vtables, 7,320 RTTI type descriptors) and **1,249 absent** ids that do not
+  exist in 1.7.104 (1,247 retired or removed classes, 1 constructor the game inlined, 1 vtable no executable has).
+  Each mapped id was carried from its 1.6.1170 address to 1.7.104 by disassembly, with its evidence and a
+  crosscheck: by exact RTTI or import name, by a function signature that occurs once in each executable, or through
+  callers, callees and data references already mapped. The mapper got 107 of 107 known pairs right, and every
+  precision self-test came out 0 wrong (`data/selftest-1.7.104-fork-full.md`). Left out on purpose: 25 ids whose
+  only meaning is the fork's own label (they are not in the 1.6.1170 Address Library either) and 11 raw RVAs that
+  are not ids.
 - **A missing id stops the game, loudly.** If your plugin asks for an id the table does not have, the game stops
-  with a message naming the id, the file, its revision, and the revision your plugin declared it needs. It tells
-  the user to report it to the plugin's author. It never returns a wrong address. A missing or damaged file, or a
+  with a message naming the id, the file, its revision, and the revision your plugin declared it needs. If the id is
+  an absent record, the message says the id does not exist in 1.7.104 (removed or inlined by the game). Either way
+  it tells the user to report it to the plugin's author. It never returns a wrong address. A missing or damaged file, or a
   file for another executable, stops the game with a message naming the file.
 - **Regenerate or extend it** with [tools/mit-idtable](tools/mit-idtable/README.md): map the id on the 1.7.104
   executable, add a row with its RVA to a CSV, and build the file again. The tool refuses a row it cannot use,
   an RVA outside the executable, and an id that two CSVs map differently. `check` proves a file matches its
-  executable and its CSV. The input CSV for the published table is `data/idmap-1.7.104.csv`, with the evidence for
-  every row, so anyone can rebuild and audit it.
+  executable and its CSV. The inputs of the published table are in `data/` (`idmap-1.7.104-fork-full.csv` and
+  `idmap-1.7.104-fixes.csv`), with the evidence for every row, so anyone can rebuild and audit it. The exact build
+  command is in the tool's README.
 
 ### Distribution rules (one shared file)
 
@@ -177,6 +191,23 @@ Every plugin on 1.7.104 reads the same file, and the copy a mod manager installe
 The table in `data/` is revision 1.
 - On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
   `GetDevice` and `GetVirtualKeyboard` handle that. The device number inside its input events is not verified.
+
+## Known 1.7.104 differences this fork does not handle yet
+
+The full mapping flagged these classes as changed on 1.7.104. Their declarations here are the 1.6.1170 ones, so a
+plugin that overrides or calls their virtual functions, or reads their members, on 1.7.104 is NOT safe yet:
+
+- Input handlers gained two virtual functions near the top of the table (slot 4 is slot 6 on 1.7.104):
+  `PlayerInputHandler` and its subclasses (Movement, Look, Sprint, ReadyWeapon, AutoMove, ToggleRun, Run, Jump,
+  Sneak, Shout, TogglePOV, Activate, AttackBlock, HeldState), `MenuEventHandler` and its subclasses (Click,
+  Direction, ConsoleOpen, MenuOpen, Favorites, Screenshot, QuickSaveLoad, the map handlers).
+- Camera states gained two virtual functions: `TESCameraState` subclasses (ThirdPerson, FirstPerson, Free, Dragon,
+  Horse, Bleedout).
+- Several menus' input-handler bases (Cursor, Favorites, Lockpicking, Mist, RaceSex, Stats, Journal, ModManager),
+  `Inventory3DManager`, `BSGamerProfile`, `BSSystemUtility` and `BSSaveDataSystemUtility`.
+- `SkyrimVM` gained two event-sink bases (Amiibo events), so its sink subobjects move.
+
+The full list, with the evidence, is in `data/summary-1.7.104-fork-full.md` ("layout flags").
 
 ## Source-breaking changes and migration
 

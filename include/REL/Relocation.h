@@ -1146,6 +1146,19 @@ namespace REL {
                                 "library for this version of the game, and thus does not support it."sv,
                                 a_id, Module::get().version().string(".")));
             }
+            if (it->offset == 0 && _mitTableRevision != 0) {
+                // mit-3.7: an absent record. The id table says the id is known NOT to exist in
+                // this executable: the game removed or inlined it, or it was retired from the
+                // AE id column. There is no address to return.
+                stl::report_and_fail(
+                        fmt::format(
+                                "Address Library id {} does not exist in Skyrim {}: the id table {} (revision {}) "
+                                "lists it as removed (the game no longer has this function or object, or inlined "
+                                "it).\nNo address was guessed. Please report this to the plugin's author: the "
+                                "plugin needs a different way to do this on this game version."sv,
+                                a_id, Module::get().version().string("."), mit_table_path(Module::get().version()),
+                                _mitTableRevision));
+            }
 
             return static_cast<std::size_t>(it->offset);
         }
@@ -1191,6 +1204,9 @@ namespace REL {
                     });
             if (it == _id2offset.end() || it->id != a_id) {
                 return std::nullopt;
+            }
+            if (it->offset == 0 && _mitTableRevision != 0) {
+                return std::nullopt;  // mit-3.7: an absent record (see id2offset)
             }
             return static_cast<std::size_t>(it->offset);
         }
@@ -1502,8 +1518,9 @@ namespace REL {
                         "build"sv,
                         a_version.string("."), u32at(24), u32at(28), timeDateStamp, sizeOfImage));
             }
-            // 4. Records: strictly ascending ids, every RVA inside the image. Bytes past the
-            // first 16 of a record belong to a later minor and are skipped.
+            // 4. Records: strictly ascending ids, every RVA inside the image (0 marks an id known
+            // not to exist in it). Bytes past the first 16 of a record belong to a later minor
+            // and are skipped.
             _mitTable = std::make_unique<mapping_t[]>(count);
             std::uint64_t prev = 0;
             for (std::size_t i = 0; i < count; ++i) {
@@ -1513,7 +1530,7 @@ namespace REL {
                 if (i != 0 && id <= prev) {
                     fail(fmt::format("its records are not strictly sorted by id (id {} after {})"sv, id, prev));
                 }
-                if (rva == 0 || rva >= sizeOfImage) {
+                if (rva >= sizeOfImage) {  // 0 is an absent record: known not to exist
                     fail(fmt::format("id {} has RVA {:X}, outside the executable"sv, id, rva));
                 }
                 _mitTable[i] = { id, rva };

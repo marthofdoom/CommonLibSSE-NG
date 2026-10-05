@@ -113,7 +113,9 @@ namespace RE::Offset
 
 	namespace BSScaleformTranslator
 	{
-		constexpr auto GetCachedString = RELOCATION_ID(67844, 69188);
+		// mit-3.7: AE id was 69188, retired (only in libraries up to 1.6.659). 443410 is its id from 1.6.1130 on:
+		// the 1.5.97 function (0xC29900) matches 1.6.1170 0xCED360 by its anchored callees and its caller (data/idmap-1.7.104-fixes.csv).
+		constexpr auto GetCachedString = RELOCATION_ID(67844, 443410);
 	}
 
 	namespace BSScript
@@ -148,7 +150,9 @@ namespace RE::Offset
 
 	namespace BSString
 	{
-		constexpr auto Set_CStr = RELOCATION_ID(10979, 11044);
+		// mit-3.7: AE id was 11044, retired (only in libraries up to 1.6.659). 439876 is its id from 1.6.1130 on:
+		// 6 anchored callers of the 1.5.97 function (0xF9E90) all call 1.6.1170 0x10AC10 there (data/idmap-1.7.104-fixes.csv).
+		constexpr auto Set_CStr = RELOCATION_ID(10979, 439876);
 	}
 
 	namespace BucketTable
@@ -168,7 +172,9 @@ namespace RE::Offset
 
 	namespace Console
 	{
-		constexpr auto SelectedRef = RELOCATION_ID(519394, 405935);
+		// mit-3.7: AE id was 405935, retired (only in libraries up to 1.6.659). 504099 is its id from 1.6.1130 on:
+		// both anchored 1.5.97 users of 0x2F4C31C have 1.6.1170 twins that read 0x31ACD74 (data/idmap-1.7.104-fixes.csv).
+		constexpr auto SelectedRef = RELOCATION_ID(519394, 504099);
 		constexpr auto SetSelectedRef = RELOCATION_ID(50164, 51093);
 	}
 
@@ -469,7 +475,9 @@ namespace RE::Offset
 
 	namespace Script
 	{
-		constexpr auto CompileAndRun = RELOCATION_ID(21416, 21890);
+		// mit-3.7: AE id was 21890, retired (only in libraries up to 1.6.659). 441582 is its id from 1.6.1130 on:
+		// 1.6.1170 0x33D6A0 is the 1.5.97 function (0x2E75F0) instruction for instruction (data/idmap-1.7.104-fixes.csv).
+		constexpr auto CompileAndRun = RELOCATION_ID(21416, 441582);
 		constexpr auto GetProcessScripts = RELOCATION_ID(21436, 21921);
 		constexpr auto SetProcessScripts = RELOCATION_ID(21435, 21920);
 	}
