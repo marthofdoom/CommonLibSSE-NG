@@ -101,7 +101,7 @@ jobs:
           conan profile new default --detect --force
           # Conan 1.x does not know the VS 2026 toolset and the runner's PATH makes detection pick the MinGW gcc; conanfile.py
           # only accepts the 'Visual Studio' compiler. The CMake generator is Ninja so version 17 is only a settings label.
-          cat > "$(conan profile path default)" <<'EOF'
+          cat > "$(conan config home)/profiles/default" <<'EOF'
           [settings]
           os=Windows
           arch=x86_64
