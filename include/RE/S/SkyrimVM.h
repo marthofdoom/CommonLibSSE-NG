@@ -241,6 +241,11 @@ namespace RE
 		struct RUNTIME_DATA
 		{
 		public:
+			// mit-3.7: only ever reached by reference through GetRuntimeData(), never constructed or destroyed
+			// by a plugin. A member type's destructor is not callable, so the implicit one was already deleted;
+			// saying so explicitly keeps MSVC's C4624 (an error under /WX) quiet. No layout change.
+			~RUNTIME_DATA() = delete;
+
 			// members
 			BSTSmartPointer<BSScript::IVirtualMachine>                            impl;                         // 0000
 			BSScript::IVMSaveLoadInterface*                                       saveLoadInterface;            // 0008
