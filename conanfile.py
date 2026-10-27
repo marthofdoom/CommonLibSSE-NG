@@ -48,7 +48,10 @@ class CommonLibSSE(ConanFile):
         if self.options.testing:
             self.requires("catch2/3.1.0")
         self.requires("rapidcsv/8.62")
-        self.requires("spdlog/1.10.0")
+        # The same spdlog and fmt the vcpkg build resolves (vcpkg.json: its baseline's spdlog 1.17.0, fmt overridden
+        # to 10.2.1). spdlog 1.10.0 pulled fmt 8.1.1, which no longer compiles in Debug with the current MSVC STL.
+        self.requires("spdlog/1.17.0")
+        self.requires("fmt/10.2.1", override=True)
         self.requires("xbyak/6.61.2")
 
     def layout(self):

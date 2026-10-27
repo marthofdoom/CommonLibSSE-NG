@@ -105,12 +105,13 @@ jobs:
         working-directory: ${{ github.workspace }}/main
         run: conan install . --build=missing -s build_type=${{ matrix.build-type == 'debug' && 'Debug' || 'Release' }} -o "&:testing=True" -c tools.cmake.cmaketoolchain:generator=Ninja
 
+      # Plain CMake, not run-cmake: run-cmake sets up MSVC through vcpkg, and this job has no vcpkg (the image's
+      # Visual Studio vcpkg has no classic mode). Setup MSVC Environment above already did that.
       - name: Build with CMake
-        uses: lukka/run-cmake@v10.9
-        with:
-          cmakeListsTxtPath: ${{ github.workspace }}/main/CMakeLists.txt
-          configurePreset: build-${{ matrix.build-type }}-${{ matrix.compiler }}-conan-${{ matrix.runtime }}
-          buildPreset: ${{ matrix.build-type }}-${{ matrix.compiler }}-conan-${{ matrix.runtime }}
+        working-directory: ${{ github.workspace }}/main
+        run: |
+          cmake --preset build-${{ matrix.build-type }}-${{ matrix.compiler }}-conan-${{ matrix.runtime }}
+          cmake --build --preset ${{ matrix.build-type }}-${{ matrix.compiler }}-conan-${{ matrix.runtime }}
 
       - name: Build with Conan
         if: matrix.compiler == 'msvc' && matrix.runtime == 'all'
