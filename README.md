@@ -270,6 +270,22 @@ Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()
   "Source-breaking changes and migration".
 - The table adds about 280 KB to each DLL.
 
+### F3 slice 1: id table revision 4
+
+- Revision 4 adds 19 AE ids that Harbinger and MFO verified for 1.7.104 and carried as raw addresses, because
+  revision 3 did not have them. Nothing in revision 3 changed: every one of its 17,751 records is byte-identical in
+  revision 4, and only the record count and the revision number in the header differ.
+- The ids: 45069 and 45056 (the Torch and one-handed-block `CheckShouldEquip`, slot 0x0F), 33235
+  (`CombatController::SetTarget`), 44705 and 44725 (`CombatGroup` remove target and target detection), 37172 (the
+  package selector), 24673 (`GetEnterCombatOverridePackage`), 39144 and 39145 (the `AIProcess` aggressor getter and
+  setter), 37196 (`Actor::PlayPickUpSound`), and 44699, 44804, 44703, 46888, 36550, 56194, 33231, 44672 and 44673,
+  the functions that hold call sites the two mods patch. The call-site offsets stay in the mods. Only the function
+  ids are here.
+- Each id was decoded from the 1.6.1170.0 Address Library and re-mapped to 1.7.104 from scratch by the same mapper as
+  the rest of the table (18 by a signature that occurs once in each executable, 44673 through 9 callers that are
+  identical in both). Each result agrees with the address the mod had verified on its own, call-site offsets
+  included. Inputs and evidence: `data/idmap-1.7.104-f3.csv`, `summary-1.7.104-f3.md`, `selftest-1.7.104-f3.md`.
+
 ## The 1.7.104 id table
 
 I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork uses its own id table, which is built
@@ -287,11 +303,11 @@ into the library and so into every plugin made with it. Players install nothing 
 - **Built in and private.** The table is compiled into each plugin. At load the fork checks it and copies its
   records into the plugin's own memory. Nothing is shared between plugins, and nothing goes into the shared mapping
   the Address Library path uses.
-- **Coverage today (revision 3): every id this fork names.** 17,751 records: **16,502 mapped** (631 functions,
+- **Coverage today (revision 4): every id this fork names, and the ids Harbinger and MFO use.** 17,770 records: **16,521 mapped** (650 functions,
   125 globals, 410 NiRTTI objects, 8,016 vtables, 7,320 RTTI type descriptors) and **1,249 absent** ids that do not
   exist in 1.7.104 (1,247 retired or removed classes, 1 constructor the game inlined, 1 vtable no executable has).
   Revision 2 added the 58 ids the upstream sync brought in and the corrected ReleaseTexture id. Revision 3 adds
-  the corrected RemoveAllItems id. Each mapped id was
+  the corrected RemoveAllItems id. Revision 4 adds 19 function ids Harbinger and MFO verified for 1.7.104. Each mapped id was
   carried from its 1.6.1170 address to 1.7.104 by disassembly, with its evidence and a crosscheck: by exact RTTI or
   import name, by a function signature that occurs once in each executable, or through callers, callees and data
   references already mapped. The mapper got 107 of 107 known pairs right, and every precision self-test came out 0
@@ -322,7 +338,7 @@ into the library and so into every plugin made with it. Players install nothing 
    against a fork whose table is older, the game stops at load with a message naming both revisions, so the mistake
    shows on the first launch. On other builds the call only records the value.
 
-The table in `data/` is revision 3.
+The table in `data/` is revision 4.
 - On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
   `GetDevice` and `GetVirtualKeyboard` handle that. The device number inside its input events is not verified.
 
