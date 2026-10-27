@@ -48,7 +48,9 @@ class CommonLibSSE(ConanFile):
 
     def requirements(self):
         if self.options.testing:
-            self.requires("catch2/3.1.0")
+            # The Catch2 the vcpkg build resolves (its baseline's 3.16.0). 3.1.0's catch_all.hpp pulls in
+            # <windows.h>, whose MAX_PATH / MEM_RELEASE macros break the REX::W32 names in the test TUs.
+            self.requires("catch2/3.16.0")
         self.requires("rapidcsv/8.62")
         # The same spdlog and fmt the vcpkg build resolves (vcpkg.json: its baseline's spdlog 1.17.0, fmt overridden
         # to 10.2.1). spdlog 1.10.0 pulled fmt 8.1.1, which no longer compiles in Debug with the current MSVC STL.
@@ -76,6 +78,8 @@ class CommonLibSSE(ConanFile):
         deps = CMakeDeps(self)
         deps.generate()
         tc = CMakeToolchain(self, generator="Ninja")
+        # Conan sets CMAKE_<LANG>_COMPILER to cl for msvc + Ninja. The presets choose the compiler (cl or clang-cl).
+        tc.blocks.remove("compilers")
         # The project has its own CMakePresets.json: write no CMakeUserPresets.json next to it.
         tc.user_presets_path = False
         tc.generate()
