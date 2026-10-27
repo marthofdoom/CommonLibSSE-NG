@@ -38,7 +38,9 @@ class CommonLibSSE(ConanFile):
         "se": True,
         "vr": True,
         "xbyak": False,
-        "spdlog/*:header_only": True
+        # Compiled spdlog, as vcpkg builds it: CMakeLists.txt links spdlog::spdlog, which the header-only package
+        # does not define (it defines spdlog::spdlog_header_only).
+        "spdlog/*:header_only": False
     }
     exports_sources = "CMakeLists.txt", "CMakePresets.json", "cmake/**", "include/**", "src/**", "tests/**", \
                       "data/mit-idtable-v1-1-7-104-0.bin", \
