@@ -156,9 +156,17 @@ namespace REL
 		inline constexpr bool member_returns_in_register_v =
 			std::is_void_v<T> || std::is_reference_v<T> || std::is_scalar_v<T>;
 
+		// __m128, __m128i and __m128d are unions to the type traits, but the compiler returns them in XMM0 from
+		// a member function too. No engine binding returns one bare, so they are refused, not guessed at.
+		template <class T>
+		inline constexpr bool is_vector_register_type_v =
+			std::is_same_v<std::remove_cv_t<T>, __m128> ||
+			std::is_same_v<std::remove_cv_t<T>, __m128i> ||
+			std::is_same_v<std::remove_cv_t<T>, __m128d>;
+
 		template <class T>
 		inline constexpr bool member_returns_through_slot_v =
-			std::is_class_v<T> || std::is_union_v<T>;
+			(std::is_class_v<T> || std::is_union_v<T>) && !is_vector_register_type_v<T>;
 
 		// The engine constructs the result in the slot. It is moved out and the slot's object is destroyed,
 		// so a counted pointer or a string the engine returns keeps an exact count. (3.7.0 returned a

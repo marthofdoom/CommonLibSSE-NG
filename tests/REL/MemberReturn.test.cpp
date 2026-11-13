@@ -122,9 +122,19 @@ static_assert(REL::detail::member_returns_through_slot_v<Counted>);
 
 TEST_CASE("RelocateVirtual/MemberReturnConvention")
 {
-	// Each runtime kind takes its own index argument: SE and AE the first, VR the second. The unused one is a slot
-	// that would return something else.
-	const auto runtime = GENERATE(REL::Module::Runtime::SE, REL::Module::Runtime::AE, REL::Module::Runtime::VR);
+	// Only the runtimes this build supports. A build with one runtime kind compiles the choice away.
+	static const std::vector<REL::Module::Runtime> runtimes{
+#ifdef ENABLE_SKYRIM_SE
+		REL::Module::Runtime::SE,
+#endif
+#ifdef ENABLE_SKYRIM_AE
+		REL::Module::Runtime::AE,
+#endif
+#ifdef ENABLE_SKYRIM_VR
+		REL::Module::Runtime::VR,
+#endif
+	};
+	const auto runtime = GENERATE(from_range(runtimes));
 	switch (runtime) {
 		case REL::Module::Runtime::SE:
 			REQUIRE(REL::Module::mock(SKSE::RUNTIME_SSE_1_5_97, runtime, L"SkyrimSE.exe", 0x1000));
@@ -136,10 +146,20 @@ TEST_CASE("RelocateVirtual/MemberReturnConvention")
 			REQUIRE(REL::Module::mock(SKSE::RUNTIME_VR_1_4_15, runtime, L"SkyrimVR.exe", 0x1000));
 			break;
 	}
+	// SE and AE take the first index argument, VR the second. Where the build can choose between them at run
+	// time, the argument the running kind must NOT use is a slot that returns something else (8, GetMarker), so
+	// a wrong choice fails. A build without VR reads only the first argument and a VR-only build reads only
+	// the second, so there both arguments are the real index.
+#if defined(ENABLE_SKYRIM_VR) && (defined(ENABLE_SKYRIM_SE) || defined(ENABLE_SKYRIM_AE))
 	const bool vr = runtime == REL::Module::Runtime::VR;
 	const auto index = [vr](std::ptrdiff_t a_index) {
 		return std::pair{ vr ? std::ptrdiff_t{ 8 } : a_index, vr ? a_index : std::ptrdiff_t{ 8 } };
 	};
+#else
+	const auto index = [](std::ptrdiff_t a_index) {
+		return std::pair{ a_index, a_index };
+	};
+#endif
 
 	Target        target;
 	const Witness witness{ target };

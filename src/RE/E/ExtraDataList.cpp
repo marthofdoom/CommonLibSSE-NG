@@ -73,6 +73,15 @@ namespace RE
 		func(this);
 	}
 
+#ifndef ENABLE_SKYRIM_AE
+	// mit-3.7: declared since 3.7.0 and never defined. It does nothing on purpose. A BaseExtraList only exists
+	// as the first member of an ExtraDataList, and ~ExtraDataList has already run the engine's destructor by
+	// the time the compiler destroys the members. That engine call released the extra data and the presence
+	// bits (it is the base list's destructor, inlined: 1.5.97 11438 is `mov dl,1; call 11427`). Releasing them
+	// here again would free them twice. A build with AE has no members in this class and no destructor.
+	BaseExtraList::~BaseExtraList() = default;
+#endif
+
 	bool BaseExtraList::PresenceBitfield::HasType(std::uint32_t a_type) const
 	{
 		const std::uint32_t index = (a_type >> 3);

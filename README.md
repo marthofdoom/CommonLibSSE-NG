@@ -300,6 +300,9 @@ Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()
   `data/idmap-1.7.104-f3s2.csv`, `summary-1.7.104-f3s2.md`, `selftest-1.7.104-f3s2.md`.
 - `ExtraDataList::~ExtraDataList` is defined (it was declared and never defined). It calls the game's own destructor
   (11438 / 11584), the one the game calls right before it frees a list. `delete list` then frees the memory.
+- `BaseExtraList::~BaseExtraList` (builds without AE only) is defined and does nothing. The game's destructor has
+  already released the list's data when the members are destroyed. Without it an SE-only or VR-only plugin that
+  destroys a list did not link.
 - `ExtraDataList::GetRuntimeSize` knows 1.7.104: 0x20, the same as 1.6.1170. So `new ExtraDataList()` works there.
   Proof: the game allocates 0x20 before 55 of its 61 constructor calls and hands 0x20 to its sized free after 43
   destructor calls.
@@ -322,6 +325,8 @@ Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()
   member function. It also returned a reference to a dead local and never destroyed the returned object, so a counted
   pointer returned this way kept one count too many. Both are fixed. No function in this fork returned a small
   trivial struct this way.
+- `__m128`, `__m128i` and `__m128d` come back in XMM0 from a member function, although the type traits call them
+  unions. No binding returns one bare, so both roads refuse them at compile time.
 - The rule was measured with MSVC 19.52 (a 4-byte struct, an 8-byte struct, a union, a class with a constructor and a
   12-byte struct, each from a virtual, a plain member, a static member and a free function). `tests/REL/MemberReturn.test.cpp`
   calls real member functions through `RelocateVirtual` and `REL::invoke` and checks the result and the object.
