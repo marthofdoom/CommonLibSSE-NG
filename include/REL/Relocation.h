@@ -40,7 +40,7 @@
 		class... Args>                                                                                \
 	struct member_function_non_pod_type<R (Cls::*)(Args...) __VA_ARGS__ a_nopropQual a_propQual>      \
 	{                                                                                                 \
-		using type = R&(__VA_ARGS__ Cls*, void*, Args...)a_propQual;                                  \
+		using type = void*(__VA_ARGS__ Cls*, void*, Args...) a_propQual;                                  \
 	};                                                                                                \
 																									  \
 	template <                                                                                        \
@@ -49,7 +49,7 @@
 		class... Args>                                                                                \
 	struct member_function_non_pod_type<R (Cls::*)(Args..., ...) __VA_ARGS__ a_nopropQual a_propQual> \
 	{                                                                                                 \
-		using type = R&(__VA_ARGS__ Cls*, void*, Args..., ...)a_propQual;                             \
+		using type = void*(__VA_ARGS__ Cls*, void*, Args..., ...) a_propQual;                             \
 	};
 
 #define REL_MAKE_MEMBER_FUNCTION_NON_POD_TYPE_HELPER(a_qualifer, ...)              \
@@ -134,19 +134,67 @@ namespace REL
 		template<class T>
 		inline constexpr bool is_x64_pod_v = is_x64_pod<T>::value;
 
-		template<
+		// mit-3.7: how MSVC x64 returns a value from a NON-STATIC MEMBER function (virtual or not).
+		//
+		//   void, a scalar (integer, float, enum, pointer), a reference: in RAX / XMM0. Same as a free function.
+		//   EVERY class and EVERY union, whatever its size and however trivial: through a hidden slot whose
+		//     address is the SECOND argument. RCX = this, RDX = the slot, RAX = the slot on return.
+		//
+		// A free (or static member) function differs twice: it returns a trivial class of 1, 2, 4 or 8 bytes in
+		// RAX with no slot at all, and for any other class it takes the slot FIRST (RCX = the slot, RDX = the
+		// first argument). So calling an engine member function through `Ret(This*, Args...)` with a class
+		// `Ret` hands the engine the slot where it expects `this`, and `this` where it expects the slot: the
+		// engine then writes its result over the object (the 2026-11 crash: `Actor::QLastRiddenMount` stored a
+		// handle into the player's vptr). Measured with cl 19.52 /O2 on a 4-byte POD, an 8-byte POD, a union, a
+		// class with a constructor and a 12-byte struct; clang's Microsoft ABI encodes the same rule (an
+		// instance method always returns a record indirectly, slot after `this`).
+		//
+		// `is_x64_pod` above describes the FREE function rule. It must not decide how a member function is
+		// called (3.7.0 used it for that, so a member function returning a small trivial struct went down the
+		// free-function road).
+		template <class T>
+		inline constexpr bool member_returns_in_register_v =
+			std::is_void_v<T> || std::is_reference_v<T> || std::is_scalar_v<T>;
+
+		template <class T>
+		inline constexpr bool member_returns_through_slot_v =
+			std::is_class_v<T> || std::is_union_v<T>;
+
+		// The engine constructs the result in the slot. It is moved out and the slot's object is destroyed,
+		// so a counted pointer or a string the engine returns keeps an exact count. (3.7.0 returned a
+		// reference to a dead local and never destroyed the slot's object.)
+		template <class R, class F, class This, class... Args>
+		[[nodiscard]] R invoke_member_through_slot(F* a_func, This&& a_self, Args&&... a_args)
+		{
+			using result_t = std::remove_cv_t<R>;
+			static_assert(member_returns_through_slot_v<result_t>);
+			static_assert(std::is_move_constructible_v<result_t> && std::is_destructible_v<result_t>,
+				"a class returned by an engine member function must be movable and destructible");
+
+			alignas(result_t) std::byte storage[sizeof(result_t)];
+			a_func(std::forward<This>(a_self), static_cast<void*>(storage), std::forward<Args>(a_args)...);
+
+			struct slot_guard
+			{
+				~slot_guard() { std::destroy_at(value); }
+				result_t* value;
+			};
+			const slot_guard slot{ std::launder(reinterpret_cast<result_t*>(storage)) };
+			return std::move(*slot.value);
+		}
+
+		template <
 			class F,
 			class First,
 			class... Rest>
-		decltype(auto) invoke_member_function_non_pod(F&& a_func, First&& a_first, Rest&& ... a_rest)  //
-		noexcept(std::is_nothrow_invocable_v<F, First, Rest...>) {
+		std::invoke_result_t<F, First, Rest...> invoke_member_function_non_pod(F&& a_func, First&& a_first, Rest&&... a_rest)  //
+			noexcept(std::is_nothrow_invocable_v<F, First, Rest...>)
+		{
 			using result_t = std::invoke_result_t<F, First, Rest...>;
-			std::aligned_storage_t<sizeof(result_t), alignof(result_t)> result;
-
-			using func_t = member_function_non_pod_type_t<F>;
+			using func_t = member_function_non_pod_type_t<std::decay_t<F>>;
 			auto func = stl::unrestricted_cast<func_t*>(std::forward<F>(a_func));
 
-			return func(std::forward<First>(a_first), std::addressof(result), std::forward<Rest>(a_rest)...);
+			return invoke_member_through_slot<result_t>(func, std::forward<First>(a_first), std::forward<Rest>(a_rest)...);
 		}
 	}
 
@@ -171,11 +219,15 @@ namespace REL
 	requires(std::invocable<F, Args...>)
 	{
 		if constexpr (std::is_member_function_pointer_v<std::decay_t<F>>) {
-			if constexpr (detail::is_x64_pod_v<std::invoke_result_t<F, Args...>>) {  // member functions == free functions in x64
+			// mit-3.7: a member function returns every class and union through a slot after `this`,
+			// see detail::member_returns_in_register_v.
+			if constexpr (detail::member_returns_in_register_v<std::invoke_result_t<F, Args...>>) {  // same as a free function
 				using func_t = detail::member_function_pod_type_t<std::decay_t<F>>;
 				auto func = stl::unrestricted_cast<func_t *>(std::forward<F>(a_func));
 				return func(std::forward<Args>(a_args)...);
 			} else {  // shift args to insert result
+				static_assert(detail::member_returns_through_slot_v<std::invoke_result_t<F, Args...>>,
+					"REL::invoke: this return type has no verified calling convention for a member function");
 				return detail::invoke_member_function_non_pod(std::forward<F>(a_func), std::forward<Args>(a_args)...);
 			}
 		} else {
@@ -494,6 +546,7 @@ namespace REL
 			using this_type = This;
 			using return_type = Ret;
 			using function_type = Ret(This*);
+			using slot_function_type = void*(This*, void*);
 		};
 
 		template<class Ret, class This, class... Args>
@@ -502,6 +555,7 @@ namespace REL
 			using this_type = This;
 			using return_type = Ret;
 			using function_type = Ret(This *, Args...);
+			using slot_function_type = void*(This *, void*, Args...);
 		};
 
 		template<class Ret, class This>
@@ -510,6 +564,7 @@ namespace REL
 			using this_type = This;
 			using return_type = Ret;
 			using function_type = Ret(This *);
+			using slot_function_type = void*(This *, void*);
 		};
 
 		template<class Ret, class This, class... Args>
@@ -518,6 +573,7 @@ namespace REL
 			using this_type = This;
 			using return_type = Ret;
 			using function_type = Ret(This *, Args...);
+			using slot_function_type = void*(This *, void*, Args...);
 		};
 
 		template<class Ret, class This>
@@ -526,6 +582,7 @@ namespace REL
 			using this_type = const This;
 			using return_type = Ret;
 			using function_type = Ret(const This *);
+			using slot_function_type = void*(const This *, void*);
 		};
 
 		template<class Ret, class This, class... Args>
@@ -534,6 +591,7 @@ namespace REL
 			using this_type = const This;
 			using return_type = Ret;
 			using function_type = Ret(const This*, Args...);
+			using slot_function_type = void*(const This*, void*, Args...);
 		};
 	}
 
@@ -565,7 +623,10 @@ namespace REL
 		[[maybe_unused]] std::ptrdiff_t a_vrVtableIndex,
 		typename detail::RelocateVirtualHelper<Fn>::this_type* a_self, Args &&... a_args)
 	{
-		return (*reinterpret_cast<typename detail::RelocateVirtualHelper<Fn>::function_type**>(
+		using helper_t = detail::RelocateVirtualHelper<Fn>;
+		using return_t = typename helper_t::return_type;
+
+		const auto func = *reinterpret_cast<const uintptr_t*>(
 				*reinterpret_cast<const uintptr_t *>(reinterpret_cast<uintptr_t>(a_self) +
 													 #ifndef ENABLE_SKYRIM_VR
 													 a_seAndAEVtableOffset) +
@@ -577,7 +638,20 @@ namespace REL
 													 (Module::IsVR() ? a_vrVtableOffset : a_seAndAEVtableOffset)) +
 				(Module::IsVR() ? a_vrVtableIndex : a_seAndAEVtableIndex)
 				#endif
-				* sizeof(uintptr_t)))(a_self, std::forward<Args>(a_args)...);
+				* sizeof(uintptr_t));
+
+		// mit-3.7: a virtual function is a member function, so the free-function signature is only right for a
+		// return in a register. A class or union comes back through the slot after `this`
+		// (detail::member_returns_in_register_v has the rule and the crash it caused). Anything else does not
+		// compile.
+		if constexpr (detail::member_returns_in_register_v<return_t>) {
+			return reinterpret_cast<typename helper_t::function_type*>(func)(a_self, std::forward<Args>(a_args)...);
+		} else {
+			static_assert(detail::member_returns_through_slot_v<return_t>,
+				"REL::RelocateVirtual: this return type has no verified calling convention for a virtual function");
+			return detail::invoke_member_through_slot<return_t>(
+				reinterpret_cast<typename helper_t::slot_function_type*>(func), a_self, std::forward<Args>(a_args)...);
+		}
 	}
 
 	/**

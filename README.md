@@ -286,6 +286,37 @@ Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()
   identical in both). Each result agrees with the address the mod had verified on its own, call-site offsets
   included. Inputs and evidence: `data/idmap-1.7.104-f3.csv`, `summary-1.7.104-f3.md`, `selftest-1.7.104-f3.md`.
 
+### Fix: a virtual function that returns a class
+
+- `REL::RelocateVirtual` called every engine virtual as a free function, `Ret(This*, Args...)`. That is right for a
+  value that comes back in a register. It is wrong for a class. A member function returns every class and every
+  union through a hidden slot that it takes as its SECOND argument, after `this`. A free function takes that slot
+  FIRST. So the engine got the slot where it expected `this`, and `this` where it expected the slot, and wrote its
+  result over the object.
+- This crashed the game: `Actor::QLastRiddenMount` (slot 0x114) stored a 4-byte handle into the vptr of the actor it
+  was called on. `Actor::DropObject` (slot 0xCB) had the same defect. Both are in upstream 3.7.0.
+- `RelocateVirtual` now passes the slot after `this` for every class and union return, moves the result out and
+  destroys the slot's object. A return type that is neither a register value nor a class does not compile.
+- `REL::invoke` (so every `REL::Relocation` of a member function type) had the same rule half right. It sent a small
+  trivial struct (1, 2, 4 or 8 bytes) down the free-function road, which is right for a free function and wrong for a
+  member function. It also returned a reference to a dead local and never destroyed the returned object, so a counted
+  pointer returned this way kept one count too many. Both are fixed. No function in this fork returned a small
+  trivial struct this way.
+- The rule was measured with MSVC 19.52 (a 4-byte struct, an 8-byte struct, a union, a class with a constructor and a
+  12-byte struct, each from a virtual, a plain member, a static member and a free function). `tests/REL/MemberReturn.test.cpp`
+  calls real member functions through `RelocateVirtual` and `REL::invoke` and checks the result and the object.
+- Every engine call in the fork that returns a class was checked against the 1.6.1170, 1.5.97 and 1.7.104
+  executables. There are five. Two automatic scans found the same five: a compiler pass over every source file with a
+  marker in each template road, and a text scan of all 887 `Relocation` and `RelocateVirtual` call sites.
+
+  | call | how it is called | what the game does on all three builds |
+  |---|---|---|
+  | `Actor::QLastRiddenMount` | `RelocateVirtual`, slot 0x114 | `mov eax,[rcx+0x91C]` (0x914 on 1.5.97, 0x924 on 1.7.104) `; mov [rdx],eax; mov rax,rdx`. The base `Actor` body stores the null handle the same way |
+  | `Actor::DropObject` | `RelocateVirtual`, slot 0xCB | keeps RCX as the actor and RDX as the slot, stores the handle with `mov [slot],eax` and returns the slot (`Actor` 37520 / 36520, `PlayerCharacter` 40454 / 39382) |
+  | `AIProcess::GetHeadtrackTarget` (38483 / 39484) | member function `Relocation` | `mov r10,[rcx+0x10]; mov [rdx],eax` |
+  | `TESDataHandler::CreateReferenceAtLocation` (13625 / 13723) | member function `Relocation` | stores the handle through its copy of RDX and returns it. The game's own callers pass `lea rdx,[slot]` and read `[rax]` |
+  | `BSPointerHandleManagerInterface::GetHandle` (15967 / 16212) | static member, so a free function | slot in RCX, the object in RDX (`test dword ptr [rdx+0x28],0x3FF; mov [rcx],eax; mov rax,rcx`). The free-function road is the right one here |
+
 ## The 1.7.104 id table
 
 I do not use the Nexus Address Library for 1.7.104. On 1.7.104.0 this fork uses its own id table, which is built
@@ -395,6 +426,10 @@ offset on some verified build, and a compile error is better than a wrong read.
 | `BSInputEventQueue::buttonEvents`, `charEvents`, `mouseEvents`, `thumbstickEvents`, `connectEvents`, `kinectEvents`, `queueHead`, `queueTail` | `GetButtonEvents()`, `GetCharEvents()`, `GetMouseEvents()`, `GetThumbstickEvents()`, `GetConnectEvents()`, `GetKinectEvents()`, `GetQueueHead()`, `GetQueueTail()` | they move on 1.7.104 |
 
 Not a compile error, but a change in behaviour:
+
+- A class returned through `REL::RelocateVirtual`, or through a `REL::Relocation` of a member function type, is now
+  moved out of the game's return slot and the slot's object is destroyed. 3.7.0 copied it and never destroyed the
+  original. For a handle nothing changes. A counted pointer returned this way no longer keeps one count too many.
 
 - The 1.7.104 id table is built into the library (F2b). Plugins built on an earlier fork read
   `Data/SKSE/Plugins/mit-idtable-v1-1-7-104-0.bin`. Rebuild them and drop that file from any requirement list. A
