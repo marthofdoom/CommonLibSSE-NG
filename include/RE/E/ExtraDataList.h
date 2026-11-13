@@ -143,7 +143,8 @@ namespace RE
 		~ExtraDataList();
 
 		// mit-3.7: the engine size of one ExtraDataList on the running build (0x18 on
-		// 1.5.97.0, 0x20 on 1.6.1170.0); a named fatal error on any other build.
+		// 1.5.97.0, 0x20 on 1.6.1170.0 and 1.7.104.0); a named fatal error on any other
+		// build.
 		[[nodiscard]] static std::size_t GetRuntimeSize() noexcept;
 
 		[[nodiscard]] inline void* operator new(std::size_t)

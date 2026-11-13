@@ -286,6 +286,26 @@ Do not "fix" the missing Actor base classes in AE-enabled builds: needing `As*()
   identical in both). Each result agrees with the address the mod had verified on its own, call-site offsets
   included. Inputs and evidence: `data/idmap-1.7.104-f3.csv`, `summary-1.7.104-f3.md`, `selftest-1.7.104-f3.md`.
 
+### F3 slice 2: id table revision 5, the ExtraDataList destructor
+
+- Revision 5 adds 22 AE function ids. Nothing in revision 4 changed: every one of its 17,770 records is the same in
+  revision 5.
+- 11572 and 11584 are the `ExtraDataList` destructor. 11584 is a bare jmp to the body 11572 on 1.6.1170 (0x151EE0 to
+  0x1513D0) and on 1.7.104 (0x157470 to 0x156960). The two bodies are the same instruction for instruction.
+- The other 20 are functions Harbinger verified for 1.7.104 and carried as raw addresses: 47532, 49170, 50675, 49100,
+  49105, 49110, 49764, 49083, 49758, 47191, 47195, 47196, 17201, 19784, 33261, 47307, 37577, 38536, 12017 and 33239.
+- Each id was re-mapped from scratch by the same mapper as the rest of the table (20 by a signature that occurs once
+  in each executable, 17201 by its signature plus the block around it, 11584 as the one jmp stub to its target). Each
+  result agrees with the address the mod had verified on its own. Inputs and evidence:
+  `data/idmap-1.7.104-f3s2.csv`, `summary-1.7.104-f3s2.md`, `selftest-1.7.104-f3s2.md`.
+- `ExtraDataList::~ExtraDataList` is defined (it was declared and never defined). It calls the game's own destructor
+  (11438 / 11584), the one the game calls right before it frees a list. `delete list` then frees the memory.
+- `ExtraDataList::GetRuntimeSize` knows 1.7.104: 0x20, the same as 1.6.1170. So `new ExtraDataList()` works there.
+  Proof: the game allocates 0x20 before 55 of its 61 constructor calls and hands 0x20 to its sized free after 43
+  destructor calls.
+- Do not destroy a list the game still owns. On 1.5.97 the inventory add (15815) destroys and frees a caller's list
+  that it merged into an existing stack. On 1.6.1170 (16053) and 1.7.104 it leaves that list to the caller.
+
 ### Fix: a virtual function that returns a class
 
 - `REL::RelocateVirtual` called every engine virtual as a free function, `Ret(This*, Args...)`. That is right for a
@@ -334,11 +354,11 @@ into the library and so into every plugin made with it. Players install nothing 
 - **Built in and private.** The table is compiled into each plugin. At load the fork checks it and copies its
   records into the plugin's own memory. Nothing is shared between plugins, and nothing goes into the shared mapping
   the Address Library path uses.
-- **Coverage today (revision 4): every id this fork names, and the ids Harbinger and MFO use.** 17,770 records: **16,521 mapped** (650 functions,
+- **Coverage today (revision 5): every id this fork names, and the ids Harbinger and MFO use.** 17,792 records: **16,543 mapped** (672 functions,
   125 globals, 410 NiRTTI objects, 8,016 vtables, 7,320 RTTI type descriptors) and **1,249 absent** ids that do not
   exist in 1.7.104 (1,247 retired or removed classes, 1 constructor the game inlined, 1 vtable no executable has).
   Revision 2 added the 58 ids the upstream sync brought in and the corrected ReleaseTexture id. Revision 3 adds
-  the corrected RemoveAllItems id. Revision 4 adds 19 function ids Harbinger and MFO verified for 1.7.104. Each mapped id was
+  the corrected RemoveAllItems id. Revision 4 adds 19 function ids Harbinger and MFO verified for 1.7.104. Revision 5 adds 22 more (F3 slice 2). Each mapped id was
   carried from its 1.6.1170 address to 1.7.104 by disassembly, with its evidence and a crosscheck: by exact RTTI or
   import name, by a function signature that occurs once in each executable, or through callers, callees and data
   references already mapped. The mapper got 107 of 107 known pairs right, and every precision self-test came out 0
@@ -369,7 +389,7 @@ into the library and so into every plugin made with it. Players install nothing 
    against a fork whose table is older, the game stops at load with a message naming both revisions, so the mistake
    shows on the first launch. On other builds the call only records the value.
 
-The table in `data/` is revision 4.
+The table in `data/` is revision 5.
 - On 1.7.104 the virtual keyboard sits in device slot 5, not in slot `INPUT_DEVICE::kVirtualKeyboard` (3).
   `GetDevice` and `GetVirtualKeyboard` handle that. The device number inside its input events is not verified.
 

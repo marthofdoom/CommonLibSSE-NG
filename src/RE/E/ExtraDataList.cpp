@@ -25,8 +25,12 @@ namespace RE
 	{
 		// Verified from the engine's own allocations before each constructor call
 		// (61 call sites of the ctor on each build): 1.5.97 `lea edx,[r9+0x18]` /
-		// `lea edx,[rcx+0x18]`, 1.6.1170 `lea edx,[r9+0x20]` / `lea edx,[rcx+0x20]`.
-		if (REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170)) {
+		// `lea edx,[rcx+0x18]`, 1.6.1170 `lea edx,[r9+0x20]` / `lea edx,[rcx+0x20]`,
+		// 1.7.104 the same 0x20 (38 `lea edx,[r9+0x20]` and 17 `mov ecx,0x20` before
+		// the ctor 0x157420), and from the size the engine hands its sized free after
+		// each destructor call: `mov edx,0x18` on 1.5.97, `mov edx,0x20` on 1.6.1170
+		// and 1.7.104.
+		if (REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_6_1170) || REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_7_104)) {
 			return 0x20;
 		}
 		if (REL::Module::IsExactly(SKSE::RUNTIME_SSE_1_5_97)) {
@@ -35,7 +39,7 @@ namespace RE
 		stl::report_and_fail(
 			std::format(
 				"ExtraDataList::GetRuntimeSize: the ExtraDataList size is not verified for game version {} "
-				"(verified: 1.6.1170.0, 1.5.97.0)."sv,
+				"(verified: 1.7.104.0, 1.6.1170.0, 1.5.97.0)."sv,
 				REL::Module::get().version().string(".")));
 	}
 
@@ -43,9 +47,29 @@ namespace RE
 	{
 		// Verified: 1.5.97 id 11437 at 0x107690 zeroes +0x00/+0x08 and builds the lock
 		// at +0x10; 1.6.1170 id 11583 at 0x151E90 stores a vtable at +0x00, zeroes
-		// +0x08/+0x10 and builds the lock at +0x18. rcx = this, returns this.
+		// +0x08/+0x10 and builds the lock at +0x18; 1.7.104 id 11583 at 0x157420 is
+		// the 1.6.1170 body. rcx = this, returns this.
 		using func_t = void(ExtraDataList*);
 		REL::Relocation<func_t> func{ RELOCATION_ID(11437, 11583) };
+		func(this);
+	}
+
+	ExtraDataList::~ExtraDataList()
+	{
+		// mit-3.7: the engine's own destructor, the one it calls right before its sized
+		// free of the list. rcx = this, nothing else. It does not free the object:
+		// `delete list` frees it through operator delete, after this.
+		//   1.5.97   id 11438 at 0x1076D0 (`mov dl,1; call 11427`), 41 call sites
+		//            followed by `mov edx,0x18` and the free.
+		//   1.6.1170 id 11584 at 0x151EE0, a bare jmp to the body id 11572 at 0x1513D0;
+		//            44 call sites of the jmp followed by `mov edx,0x20` and the free.
+		//   1.7.104  id 11584 at 0x157470, a bare jmp to the body id 11572 at 0x156960,
+		//            instruction for instruction the 1.6.1170 body; 43 such call sites.
+		// One list the game still owns must never come here. On 1.5.97 the inventory
+		// add (15815) destroys and frees a caller's list it merged; on 1.6.1170 (16053)
+		// and 1.7.104 it leaves that list to the caller.
+		using func_t = void(ExtraDataList*);
+		REL::Relocation<func_t> func{ RELOCATION_ID(11438, 11584) };
 		func(this);
 	}
 

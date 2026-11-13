@@ -21,19 +21,20 @@ python3 tools/mit-idtable/mit_idtable.py build \
     --csv data/idmap-1.7.104-sync.csv \
     --csv data/idmap-1.7.104-fixes.csv \
     --csv data/idmap-1.7.104-f3.csv \
+    --csv data/idmap-1.7.104-f3s2.csv \
     --rva-col rva_1_7_104 \
     --where kind=id,vtable,rtti,nirtti \
     --where final_state=MAPPED \
     --where confidence=EXACT,UNIQUE-SIG,XREF \
     --where crosscheck=pass,na \
     --absent-where final_state=REMOVED,INLINED,ABSENT \
-    --revision 4 --previous <revision 3 file> \
+    --revision 5 --previous <revision 4 file> \
     --out data/
 ```
 
-This writes `data/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revision 4), exactly the table in the fork. The fork
+This writes `data/mit-idtable-v1-1-7-104-0.bin` (format 1.0, revision 5), exactly the table in the fork. The fork
 builds that file into the library, so a new table reaches players when plugins are rebuilt against the fork release
-that carries it. Nobody installs the file itself. Revisions 1 to 3 were built from fewer rows (see the README
+that carries it. Nobody installs the file itself. Revisions 1 to 4 were built from fewer rows (see the README
 changelog).
 
 - `--where COL=A,B` keeps a row only when COL is one of the listed values. Give it several times and every one
@@ -59,7 +60,7 @@ changelog).
   executable you pass is named differently (for example a renamed copy), since the fork compares the name.
 - After writing, the tool reads its own output back under the same rules the fork applies.
 
-### What the published table holds (revision 4)
+### What the published table holds (revision 5)
 
 The inputs are committed in `data/` with their evidence, so anyone can rebuild and audit them:
 
@@ -74,8 +75,12 @@ The inputs are committed in `data/` with their evidence, so anyone can rebuild a
 - `idmap-1.7.104-f3.csv`, `summary-1.7.104-f3.md` and `selftest-1.7.104-f3.md`: 19 AE function ids Harbinger and
   MFO verified for 1.7.104 (F3 slice 1, revision 4), re-mapped by the same mapper, all 19 MAPPED with a passing
   crosscheck, every precision self-test 0 wrong.
+- `idmap-1.7.104-f3s2.csv`, `summary-1.7.104-f3s2.md` and `selftest-1.7.104-f3s2.md`: 22 AE function ids (F3 slice 2,
+  revision 5): the `ExtraDataList` destructor body and its jmp stub (11572, 11584) and 20 functions Harbinger
+  verified for 1.7.104. Re-mapped by the same mapper, all 22 MAPPED with a passing crosscheck, every precision
+  self-test 0 wrong.
 
-The build above gives 17,770 records: **16,521 mapped** and **1,249 absent** (1,247 ids REMOVED, 1 INLINED, 1 with no
+The build above gives 17,792 records: **16,543 mapped** and **1,249 absent** (1,247 ids REMOVED, 1 INLINED, 1 with no
 vtable in any executable). 43 rows are left out on purpose:
 
 - 11 raw-RVA rows (seat addresses for one mod, not ids).
